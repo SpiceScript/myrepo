@@ -1,5 +1,3 @@
-Sure, here is the content formatted to be included in a GitHub repository as a README file.
-
 ### README.md
 
 ```markdown
