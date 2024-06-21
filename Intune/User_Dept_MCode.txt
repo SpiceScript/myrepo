@@ -28,3 +28,4 @@ let
     usersExpanded = Table.ExpandRecordColumn(usersTable, "Column1", {"id", "displayName", "department"})
 in
     usersExpanded
+
