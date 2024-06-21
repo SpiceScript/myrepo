@@ -1,28 +1,28 @@
 #Replace YOUR_TENANT_ID, YOUR_CLIENT_ID, and YOUR_CLIENT_SECRET with the values from your Azure AD app registration.
 
 let
-    // Define the necessary variables
     tenantId = "YOUR_TENANT_ID",
     clientId = "YOUR_CLIENT_ID",
     clientSecret = "YOUR_CLIENT_SECRET",
-    authorityUrl = "https://login.microsoftonline.com/" & tenantId & "/oauth2/v2.0/token",
-    
+    resource = "https://graph.microsoft.com",
+    tokenUrl = "https://login.microsoftonline.com/" & tenantId & "/oauth2/v2.0/token",
+
     // Request an access token
-    tokenResponse = Json.Document(Web.Contents(authorityUrl, [
-        Content = Text.ToBinary("grant_type=client_credentials&client_id=" & clientId & "&client_secret=" & clientSecret & "&scope=https%3A%2F%2Fgraph.microsoft.com%2F.default"),
+    tokenResponse = Json.Document(Web.Contents(tokenUrl, [
+        Content = Text.ToBinary("grant_type=client_credentials&client_id=" & clientId & "&client_secret=" & clientSecret & "&scope=" & Uri.EscapeDataString(resource & "/.default")),
         Headers = [#"Content-Type"="application/x-www-form-urlencoded"]
     ])),
     accessToken = tokenResponse[access_token],
-    
+
     // Define the API URL
     apiUrl = "https://graph.microsoft.com/v1.0/users?$select=id,displayName,department",
-    
+
     // Call the Microsoft Graph API
     apiResponse = Json.Document(Web.Contents(apiUrl, [
         Headers = [Authorization = "Bearer " & accessToken]
     ])),
     users = apiResponse[value],
-    
+
     // Convert the result to a table
     usersTable = Table.FromList(users, Splitter.SplitByNothing(), null, null, ExtraValues.Error),
     usersExpanded = Table.ExpandRecordColumn(usersTable, "Column1", {"id", "displayName", "department"})
