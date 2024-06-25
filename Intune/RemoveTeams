@@ -1,3 +1,8 @@
+# https://learn.microsoft.com/en-us/troubleshoot/windows-client/application-management/managing-teams-chat-icon-windows-11
+# As an admin, how do I uninstall the Teams app if users have installed it?
+# If Teams was installed, use this PowerShell cmdlet to uninstall it:
+# remove-appxpackage -package "MicrosoftTeams_21302.202.1065.6968_x64__8wekyb3d8bbwe"
+
 # Define the package name
 $packageName = "MicrosoftTeams_21302.202.1065.6968_x64__8wekyb3d8bbwe"
 
