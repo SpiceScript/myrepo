@@ -1,0 +1,23 @@
+# Define the package name
+$packageName = "MicrosoftTeams_21302.202.1065.6968_x64__8wekyb3d8bbwe"
+
+# Define the log file path
+$logFilePath = "C:\Windows\Temp\RemoveTeams.log"
+
+# Get the package if it exists
+$package = Get-AppxPackage -Name $packageName -ErrorAction SilentlyContinue
+
+# Check if the package is found and remove it
+if ($package) {
+    try {
+        Remove-AppxPackage -Package $packageName
+        # Write success message to the log file
+        "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] Package $packageName removed successfully." | Out-File -FilePath $logFilePath -Append
+    } catch {
+        # Write error message to the log file
+        "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] Failed to remove package $packageName. Error: $_" | Out-File -FilePath $logFilePath -Append
+    }
+} else {
+    # Write not found message to the log file
+    "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] Package not found: $packageName" | Out-File -FilePath $logFilePath -Append
+}
