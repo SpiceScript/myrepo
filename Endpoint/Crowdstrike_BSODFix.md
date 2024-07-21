@@ -1,10 +1,11 @@
 # CrowdStrike BSOD Issue Resolution: WinPE Boot Disk with Automated File Deletion
 
-**Description**
+## Description
 
 This script addresses the recent CrowdStrike BSOD issue by creating a WinPE boot disk with BitLocker and PowerShell support. The boot disk will automatically delete a specific driver file known to cause system crashes (BSOD). The steps below guide you through creating the boot disk and automating the removal of the problematic file.
 
-## Preparation
+**Preparation**
+
 Before you begin, ensure you have installed the Windows Assessment and Deployment Kit (ADK) and the WinPE add-on. You can download them from the official Microsoft website.
 
 ## Steps to Create the WinPE Boot Disk
