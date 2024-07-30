@@ -3,7 +3,7 @@
     Analyzes Intune Management Extension diagnostics logs and generates reports.
 
 .DESCRIPTION
-    This script merges functionalities from two provided scripts to analyze Intune Management Extension diagnostics logs and generate detailed reports.
+    This script merges functionalities from two provided scripts to analyze Intune Management Extension diagnostics logs and generate detailed HTML reports.
 
 .PARAMETER DiagnosticsPath
     The path to the folder containing the diagnostics logs.
@@ -61,9 +61,37 @@ function Analyze-Logs {
         }
     }
 
-    # Save analysis results
-    $analysisResults | Export-Csv -Path "$OutputPath\LogAnalysisReport.csv" -NoTypeInformation
-    Write-Output "Analysis report saved to $OutputPath\LogAnalysisReport.csv"
+    # Generate HTML report
+    $html = @"
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Log Analysis Report</title>
+    <style>
+        table { width: 100%; border-collapse: collapse; }
+        th, td { border: 1px solid black; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+    </style>
+</head>
+<body>
+    <h2>Log Analysis Report</h2>
+    <table>
+        <tr>
+            <th>Log File</th>
+            <th>Error Count</th>
+            <th>Errors</th>
+        </tr>
+"@
+    foreach ($result in $analysisResults) {
+        $html += "<tr><td>$($result.LogFile)</td><td>$($result.ErrorCount)</td><td>$($result.Errors -join '<br>')</td></tr>"
+    }
+    $html += @"
+    </table>
+</body>
+</html>
+"@
+    $html | Out-File -FilePath "$OutputPath\LogAnalysisReport.html"
+    Write-Output "Analysis report saved to $OutputPath\LogAnalysisReport.html"
 }
 
 # Function to analyze Intune PolicySet
@@ -85,19 +113,68 @@ function Analyze-PolicySet {
         Policies = $policySet.Policies | Select-Object -Property DisplayName, Id
     }
 
-    # Save PolicySet analysis results
-    $policySetAnalysis | Export-Csv -Path "$OutputPath\PolicySetAnalysisReport.csv" -NoTypeInformation
-    Write-Output "PolicySet analysis report saved to $OutputPath\PolicySetAnalysisReport.csv"
+    # Generate HTML report
+    $html = @"
+<!DOCTYPE html>
+<html>
+<head>
+    <title>PolicySet Analysis Report</title>
+    <style>
+        table { width: 100%; border-collapse: collapse; }
+        th, td { border: 1px solid black; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+    </style>
+</head>
+<body>
+    <h2>PolicySet Analysis Report</h2>
+    <p><strong>PolicySet Name:</strong> $($policySetAnalysis.PolicySetName)</p>
+    <p><strong>Policy Count:</strong> $($policySetAnalysis.PolicyCount)</p>
+    <table>
+        <tr>
+            <th>Policy Name</th>
+            <th>Policy ID</th>
+        </tr>
+"@
+    foreach ($policy in $policySetAnalysis.Policies) {
+        $html += "<tr><td>$($policy.DisplayName)</td><td>$($policy.Id)</td></tr>"
+    }
+    $html += @"
+    </table>
+</body>
+</html>
+"@
+    $html | Out-File -FilePath "$OutputPath\PolicySetAnalysisReport.html"
+    Write-Output "PolicySet analysis report saved to $OutputPath\PolicySetAnalysisReport.html"
 }
 
 # Function to extract relevant information from diagnostics logs
 function Extract-InfoFromDiagnostics {
     param (
-        [string]$DiagnosticsPath
+        [string]$DiagnosticsPath,
+        [string]$OutputPath
     )
 
     $diagnosticsFiles = Get-ChildItem -Path $DiagnosticsPath -Filter '*.zip' -Recurse
 
+    $html = @"
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Diagnostics Summary</title>
+    <style>
+        table { width: 100%; border-collapse: collapse; }
+        th, td { border: 1px solid black; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+    </style>
+</head>
+<body>
+    <h2>Diagnostics Summary</h2>
+    <table>
+        <tr>
+            <th>Device ID</th>
+            <th>Status</th>
+        </tr>
+"@
     foreach ($file in $diagnosticsFiles) {
         $extractedPath = "$DiagnosticsPath\Extracted\$($file.BaseName)"
         Expand-Archive -Path $file.FullName -DestinationPath $extractedPath -Force
@@ -108,14 +185,21 @@ function Extract-InfoFromDiagnostics {
             Status = ($diagContent | Select-String -Pattern 'Status').Line.Split('=')[1].Trim()
         }
 
-        $parsedInfo | Export-Csv -Path "$DiagnosticsPath\DiagnosticsSummary.csv" -Append -NoTypeInformation
+        $html += "<tr><td>$($parsedInfo.DeviceId)</td><td>$($parsedInfo.Status)</td></tr>"
     }
+    $html += @"
+    </table>
+</body>
+</html>
+"@
+    $html | Out-File -FilePath "$OutputPath\DiagnosticsSummary.html"
+    Write-Output "Diagnostics summary saved to $OutputPath\DiagnosticsSummary.html"
 }
 
 # Main script execution
 Write-Output "Starting analysis..."
 Analyze-Logs -DiagnosticsPath $DiagnosticsPath -OutputPath $OutputPath
-Extract-InfoFromDiagnostics -DiagnosticsPath $DiagnosticsPath
+Extract-InfoFromDiagnostics -DiagnosticsPath $DiagnosticsPath -OutputPath $OutputPath
 
 if ($PolicySetId) {
     Analyze-PolicySet -PolicySetId $PolicySetId -OutputPath $OutputPath
