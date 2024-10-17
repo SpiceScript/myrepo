@@ -1,3 +1,89 @@
+# Function to get all pages of results from the Graph API
+function Get-MgGraphAllPages {
+    param (
+        [Parameter(Mandatory = $true)]
+        [string]$NextLink
+    )
+
+    $results = @()
+
+    do {
+        $response = Invoke-RestMethod -Uri $NextLink -Headers @{Authorization = "Bearer $global:token"} -Method Get
+        $results += $response.value
+        $NextLink = $response.'@odata.nextLink'
+    } while ($NextLink)
+
+    return $results
+}
+
+# Function to authenticate to Microsoft Graph and get an authentication token
+function Get-AuthToken {
+    param (
+        [string]$tenantId,
+        [string]$clientId,
+        [string]$clientSecret
+    )
+
+    $body = @{
+        grant_type    = "client_credentials"
+        client_id     = $clientId
+        client_secret = $clientSecret
+        scope         = "https://graph.microsoft.com/.default"
+    }
+
+    $response = Invoke-RestMethod -Uri "https://login.microsoftonline.com/$tenantId/oauth2/v2.0/token" -Method Post -Body $body -ContentType "application/x-www-form-urlencoded"
+    $global:token = $response.access_token
+}
+
+# Function to get devices within a specified Azure AD group
+function Get-DevicesInAADGroup {
+    param (
+        [string]$groupId
+    )
+
+    $groupMembersUri = "https://graph.microsoft.com/v1.0/groups/$groupId/members?$filter=startswith(deviceId, '')"
+    $groupMembers = Get-MgGraphAllPages -NextLink $groupMembersUri
+
+    return $groupMembers | Where-Object { $_.operatingSystem -eq 'Windows' } | Select-Object deviceId, displayName
+}
+
+# Function to get BitLocker escrow status for Azure AD devices
+function Get-BitlockerEscrowStatusForAADGroup {
+    param (
+        [string]$tenantId,
+        [string]$clientId,
+        [string]$clientSecret,
+        [string]$groupId
+    )
+
+    Get-AuthToken -tenantId $tenantId -clientId $clientId -clientSecret $clientSecret
+
+    $aadDevices = Get-DevicesInAADGroup -groupId $groupId
+
+    $deviceIds = $aadDevices | Select-Object -ExpandProperty deviceId
+
+    $recoveryKeysUri = "https://graph.microsoft.com/beta/informationProtection/bitlocker/recoveryKeys?$filter=deviceId in ($($deviceIds -join ','))"
+    $recoveryKeys = Get-MgGraphAllPages -NextLink $recoveryKeysUri
+
+    $aadDevices | Select-Object displayName, deviceId, @{
+        Name = 'ValidRecoveryBitlockerKeyInAzure'
+        Expression = {
+            $deviceId = $_.deviceId
+            $validRecoveryKey = $recoveryKeys | Where-Object { $_.deviceId -eq $deviceId }
+            if ($validRecoveryKey) { $true } else { $false }
+        }
+    }
+}
+
+# Main script execution
+$tenantId = "<Your Tenant ID>"
+$clientId = "<Your Client ID>"
+$clientSecret = "<Your Client Secret>"
+$groupId = "<Azure AD Group ID>"
+
+Get-BitlockerEscrowStatusForAADGroup -tenantId $tenantId -clientId $clientId -clientSecret $clientSecret -groupId $groupId
+
+///////////////********************
 <#
 .SYNOPSIS
 This script retrieves the BitLocker key escrow status for Windows devices within a specified Azure AD group. 
