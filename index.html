@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Bitwarden Password Analyzer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+  <body class="bg-gray-100 min-h-screen">
+    <div class="max-w-4xl mx-auto">
+      <h1 class="text-3xl font-bold text-center text-blue-600 my-6">Bitwarden Password Analyzer</h1>
+      <label for="fileInput" class="block w-full text-sm text-gray-500 py-2 px-4 rounded-full border bg-blue-50 text-blue-700 hover:bg-blue-100 cursor-pointer text-center">Choose File
+        <input type="file" id="fileInput" accept=".json" class="hidden" />
+      </label>
+      <button id="deleteDuplicatesBtn" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded flex items-center mx-auto mt-4" style="display: none;">
+        Delete Duplicates
+      </button>
+      <button id="downloadBtn" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded flex items-center mx-auto mt-4" style="display: none;">
+        Download Updated Export
+      </button>
+      <div id="statistics" class="text-center text-gray-700 my-4"></div>
+      <div id="results" class="space-y-6 p-8"></div>
+    </div>
+
+    <script>
+      let deletedItems = new Set();
+      let originalData = null;
+      let groupedData = {}; 
+
+      function extractDomain(url) {
+        try {
+          return new URL(url).hostname;
+        } catch (error) {
+          return url;
+        }
+      }
+
+      function groupPasswords(data) {
+        const groups = {};
+        data.items.forEach((item) => {
+          if (item.type === 1 && item.login) {
+            const domain = item.login.uris && item.login.uris.length > 0 ? extractDomain(item.login.uris[0].uri) : "No URL";
+            const username = item.login.username || "No Username";
+            const password = item.login.password || "No Password";
+            const key = `${domain}|${username}|${password}`;
+            
+            if (!groups[key]) {
+              groups[key] = [];
+            }
+            groups[key].push({ ...item });
+          }
+        });
+        return groups;
+      }
+
+      function updateStatistics() {
+        const totalEntries = originalData ? originalData.items.length : 0;
+        const totalDeleted = deletedItems.size;
+        const remainingEntries = totalEntries - totalDeleted;
+        
+        document.getElementById("statistics").innerHTML = `
+          <p><strong>Total Entries:</strong> ${totalEntries}</p>
+          <p><strong>Deleted Entries:</strong> ${totalDeleted}</p>
+          <p><strong>Remaining Entries:</strong> ${remainingEntries}</p>
+        `;
+      }
+
+      function deleteDuplicates() {
+        Object.entries(groupedData).forEach(([key, items]) => {
+          if (items.length > 1) {
+            items.slice(1).forEach(item => deletedItems.add(item.id));
+          }
+        });
+        displayResults();
+      }
+
+      function displayResults() {
+        const resultsDiv = document.getElementById("results");
+        resultsDiv.innerHTML = "";
+
+        document.getElementById("deleteDuplicatesBtn").style.display = "block";
+        document.getElementById("downloadBtn").style.display = "block";
+
+        Object.entries(groupedData).forEach(([key, items]) => {
+          const filteredItems = items.filter(item => !deletedItems.has(item.id));
+          const [domain, username, password] = key.split("|");
+          const groupDiv = document.createElement("div");
+          groupDiv.className = "bg-white shadow-md rounded-lg p-6";
+          groupDiv.innerHTML = `
+            <h2 class="text-xl font-semibold mb-4 text-gray-800">${domain} - (${filteredItems.length})</h2>
+            <ul class="space-y-4">
+              ${filteredItems.map(item => `
+                <li class="flex items-center justify-between ${deletedItems.has(item.id) ? 'opacity-50' : ''}">
+                  <div class="flex flex-col gap-2">
+                    <div class="text-gray-600">${item.name}</div>
+                    <div class="text-sm text-gray-400">Username: ${username}</div>
+                    <div class="text-sm text-gray-400">Password: ${password}</div>
+                    <div class="text-xs text-gray-400">URIs: ${item.login.uris ? item.login.uris.map(uri => uri.uri).join(", ") : "No URL"}</div>
+                  </div>
+                </li>
+              `).join("")}
+            </ul>
+          `;
+          resultsDiv.appendChild(groupDiv);
+        });
+        updateStatistics();
+      }
+
+      function downloadUpdatedJSON() {
+        if (!originalData) return;
+
+        const updatedData = {
+          ...originalData,
+          items: originalData.items.filter(item => !deletedItems.has(item.id)),
+        };
+
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(updatedData, null, 2));
+        const downloadAnchorNode = document.createElement("a");
+        downloadAnchorNode.setAttribute("href", dataStr);
+        downloadAnchorNode.setAttribute("download", "updated_export.json");
+        document.body.appendChild(downloadAnchorNode);
+        downloadAnchorNode.click();
+        downloadAnchorNode.remove();
+      }
+
+      function handleFileSelect(event) {
+        const file = event.target.files[0];
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            try {
+              originalData = JSON.parse(e.target.result);
+              groupedData = groupPasswords(originalData);
+              displayResults();
+            } catch (error) {
+              console.error("Error parsing JSON:", error);
+              alert("Error parsing JSON. Please upload a valid Bitwarden export.");
+            }
+          };
+          reader.readAsText(file);
+        }
+      }
+
+      document.getElementById("fileInput").addEventListener("change", handleFileSelect);
+      document.getElementById("deleteDuplicatesBtn").addEventListener("click", deleteDuplicates);
+      document.getElementById("downloadBtn").addEventListener("click", downloadUpdatedJSON);
+    </script>
+  </body>
+</html>
