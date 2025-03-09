@@ -2,7 +2,7 @@
 
 ## Overview
 This tool is a web-based **Bitwarden Password Analyzer** that helps users identify and remove duplicate logins from their **Bitwarden vault export**. It is built using **HTML and JavaScript**, eliminating the need for external dependencies or backend processing.
-
+![image](https://github.com/user-attachments/assets/5fa18244-e270-48d8-8a47-13f72e289fbc)
 ## Features
 - **Find duplicate logins** based on **domain, username, and password**.
 - **Keep different usernames** even if the domain and password match.
