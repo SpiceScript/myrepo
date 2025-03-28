@@ -1,4 +1,5 @@
 # This PowerShell script authenticates with Microsoft Graph, retrieves Windows 10 MDM-based configuration policies and their settings, and exports them to a JSON file.
+# Updated PowerShell script using Microsoft Graph module
 
 # Check and Import Required Module
 if (-not (Get-Module -ListAvailable -Name Microsoft.Graph)) {
@@ -23,9 +24,8 @@ function Get-GraphAuthToken {
     
     # Connect to Microsoft Graph
     $Scopes = @("https://graph.microsoft.com/.default")
-    $SecureSecret = ConvertTo-SecureString -String $ClientSecret -AsPlainText -Force
     
-    Connect-MgGraph -TenantId $TenantId -ClientId $ClientId -ClientSecret $SecureSecret -Scopes $Scopes
+    Connect-MgGraph -TenantId $TenantId -ClientId $ClientId -ClientSecret $ClientSecret -Scopes $Scopes
     if ($global:GraphContext) {
         Write-Host "Connected to Microsoft Graph."
     } else {
