@@ -5,7 +5,7 @@ if (-not (Get-Module -ListAvailable -Name Microsoft.Graph)) {
     Write-Host "Microsoft Graph module not found. Installing..."
     Install-Module Microsoft.Graph -Scope CurrentUser -Force
 }
-#Import-Module Microsoft.Graph
+Import-Module Microsoft.Graph
 
 # Function to authenticate using Microsoft Graph PowerShell SDK
 function Get-GraphAuthToken {
@@ -21,13 +21,9 @@ function Get-GraphAuthToken {
         [string]$ClientSecret
     )
     
-    # Convert client secret to secure string
-    $ClientSecretSecure = ConvertTo-SecureString $ClientSecret -AsPlainText -Force
-    $Credential = New-Object System.Management.Automation.PSCredential ($ClientId, $ClientSecretSecure)
-    
     # Connect to Microsoft Graph
     $Scopes = @("https://graph.microsoft.com/.default")
-    Connect-MgGraph -TenantId $TenantId -ClientSecretCredential $Credential -Scopes $Scopes
+    Connect-MgGraph -TenantId $TenantId -ClientId $ClientId -ClientSecret $ClientSecret -Scopes $Scopes
     
     if ($global:GraphContext) {
         Write-Host "Connected to Microsoft Graph."
@@ -37,14 +33,20 @@ function Get-GraphAuthToken {
     }
 }
 
-# Function to get Windows 10 MDM-based configuration policies
-function Get-ConfigurationPolicies {
-    Write-Host "Fetching Windows 10 configuration policies..."
-    $policies = Get-MgBetaDeviceManagementConfigurationPolicy -Filter "platforms has 'windows10' and technologies has 'mdm'"
-    if (-not $policies) {
-        Write-Host "No Windows 10 policies found." -ForegroundColor Yellow
+# Function to get assigned configuration profiles for an AD group
+function Get-AssignedConfigurationPolicies {
+    param (
+        [Parameter(Mandatory = $true)]
+        [string]$GroupName
+    )
+    Write-Host "Fetching assigned configuration policies for AD group: $GroupName"
+    $Group = Get-MgGroup -Filter "displayName eq '$GroupName'"
+    if (-not $Group) {
+        Write-Host "AD Group not found." -ForegroundColor Red
         exit
     }
+    $GroupId = $Group.Id
+    $policies = Get-MgBetaDeviceManagementConfigurationPolicyAssignment | Where-Object { $_.Target.GroupId -eq $GroupId }
     return $policies
 }
 
@@ -59,18 +61,26 @@ function Get-PolicySettings {
     return $settings
 }
 
-# Prompt for Export Path
-$ExportPath = "SettingsCatalog_Export.json"
-if (!(Test-Path $ExportPath)) {
-    New-Item -ItemType File -Path $ExportPath -Force | Out-Null
+# Export settings to Excel
+function Export-ToExcel {
+    param (
+        [Parameter(Mandatory = $true)]
+        [Array]$Data,
+        
+        [Parameter(Mandatory = $true)]
+        [string]$FilePath
+    )
+    if (-not (Get-Module -ListAvailable -Name ImportExcel)) {
+        Install-Module -Name ImportExcel -Scope CurrentUser -Force
+    }
+    Import-Module ImportExcel
+    $Data | Export-Excel -Path $FilePath -AutoSize -TableName "ConfigurationSettings"
+    Write-Host "Settings exported successfully to $FilePath"
 }
 
-# User Confirmation Before Execution
-$Confirm = Read-Host "Do you want to proceed with exporting settings? (y/n)"
-if ($Confirm -ne "y" -and $Confirm -ne "Y") {
-    Write-Host "Operation canceled by user." -ForegroundColor Yellow
-    exit
-}
+# Hardcoded AD Group Name
+$GroupName = "ADGROUP"
+$ExportPath = "SettingsCatalog_Export.xlsx"
 
 # Main execution
 $TenantId = "your-tenant-id"
@@ -78,16 +88,15 @@ $ClientId = "your-client-id"
 $ClientSecret = "your-client-secret"
 
 Get-GraphAuthToken -TenantId $TenantId -ClientId $ClientId -ClientSecret $ClientSecret
-$ConfigurationPolicies = Get-ConfigurationPolicies
+$AssignedPolicies = Get-AssignedConfigurationPolicies -GroupName $GroupName
 
-# Loop through each policy and fetch settings
+# Loop through each assigned policy and fetch settings
 $AllSettings = @()
-foreach ($policy in $ConfigurationPolicies) {
+foreach ($policy in $AssignedPolicies) {
     $policyId = $policy.Id
     $settings = Get-PolicySettings -PolicyId $policyId
     $AllSettings += $settings
 }
 
-# Export settings to JSON
-$AllSettings | ConvertTo-Json -Depth 3 | Out-File -FilePath $ExportPath
-Write-Host "Settings catalog exported successfully to $ExportPath."
+# Export settings to Excel
+Export-ToExcel -Data $AllSettings -FilePath $ExportPath
