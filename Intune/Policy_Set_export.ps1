@@ -1,135 +1,85 @@
 <#
 .SYNOPSIS
-Exports detailed configuration profile settings from an Intune Policy Set to Excel
+Exports device configuration profile settings from an Intune Policy Set using Microsoft Graph
+Documentation: https://learn.microsoft.com/en-us/graph/api/intune-policyset-policyset-get?view=graph-rest-beta
 #>
 
-# Hardcoded Configuration
-$policySetName = "YOUR_POLICY_SET_NAME"  # ← Replace with your policy set name
-$outputPath = "C:\IntuneExports\PolicySettings.xlsx"  # ← Replace with your output path
+# Configuration
+$policySetName = "Your-Policy-Set-Name"
+$outputPath = "C:\Exports\PolicySetSettings.xlsx"
 
-# Check for required modules
+# Modules Check
 if (-not (Get-Module -ListAvailable Microsoft.Graph.Beta)) {
-    Write-Host "Installing Microsoft Graph Beta module..." -ForegroundColor Cyan
-    Install-Module Microsoft.Graph.Beta -Scope CurrentUser -Force -AllowClobber
+    Install-Module Microsoft.Graph.Beta -Scope CurrentUser -Force
 }
-
 if (-not (Get-Module -ListAvailable ImportExcel)) {
-    Write-Host "Installing ImportExcel module..." -ForegroundColor Cyan
     Install-Module ImportExcel -Scope CurrentUser -Force
 }
 
 Import-Module Microsoft.Graph.Beta
 Import-Module ImportExcel
 
-# Main script
 try {
-    # Authenticate to Microsoft Graph
-    Write-Host "Starting authentication process..." -ForegroundColor Cyan
-    Connect-MgGraph -Scopes "DeviceManagementConfiguration.Read.All" -NoWelcome -ErrorAction Stop
-    $accessToken = (Get-MgContext).AccessToken
-    $headers = @{ Authorization = "Bearer $accessToken" }
-    Write-Host "Successfully authenticated!" -ForegroundColor Green
+    # Authenticate
+    Connect-MgGraph -Scopes "DeviceManagementConfiguration.Read.All" -NoWelcome
+    $headers = @{ Authorization = "Bearer $(Get-MgAccessToken)" }
 
-    # Retrieve Policy Set
-    Write-Host "`nProcessing Policy Set: $policySetName" -ForegroundColor Cyan
+    # Get Policy Set with expanded items
     $policySet = Invoke-RestMethod `
-        -Uri "https://graph.microsoft.com/beta/deviceManagement/configurationPolicySets?`$filter=displayName eq '$policySetName'" `
-        -Headers $headers `
-        -ErrorAction Stop
+        -Uri "https://graph.microsoft.com/beta/deviceAppManagement/policySets?`$filter=displayName eq '$policySetName'&`$expand=items" `
+        -Headers $headers
 
     if (-not $policySet.value) {
-        throw "Policy Set '$policySetName' not found! Please verify the name."
+        throw "Policy Set '$policySetName' not found"
     }
 
-    $policySetId = $policySet.value[0].id
-    Write-Host "Found Policy Set ID: $policySetId" -ForegroundColor Green
-
-    # Retrieve Assignments
-    Write-Host "Retrieving assignments..." -ForegroundColor Cyan
-    $assignments = Invoke-RestMethod `
-        -Uri "https://graph.microsoft.com/beta/deviceManagement/configurationPolicySets/$policySetId/assignments" `
-        -Headers $headers `
-        -ErrorAction Stop
-
-    $profileIds = $assignments.value.target.configurationPolicyIds
-    if (-not $profileIds) {
-        throw "No configuration profiles found in the Policy Set"
+    # Filter for Configuration Policies (Settings Catalog)
+    $configItems = $policySet.value.items | Where-Object {
+        $_.resourceType -eq "Microsoft.Management.Services.Api.DeviceConfiguration_ConfigurationPolicy"
     }
-    Write-Host "Found $($profileIds.Count) configuration profiles" -ForegroundColor Green
 
-    # Process Profiles
-    $results = @()
-    $totalProfiles = $profileIds.Count
-    $current = 1
+    if (-not $configItems) {
+        throw "No device configuration profiles found in the Policy Set"
+    }
 
-    foreach ($profileId in $profileIds) {
+    # Process Configuration Policies
+    $results = foreach ($item in $configItems) {
         try {
-            Write-Progress -Activity "Processing Profiles" -Status "$current/$totalProfiles" -PercentComplete ($current/$totalProfiles*100)
-            Write-Host "`nProcessing profile $current/$totalProfiles (ID: $profileId)" -ForegroundColor Cyan
+            # Get policy details
+            $policy = Invoke-RestMethod `
+                -Uri "https://graph.microsoft.com/beta/deviceManagement/configurationPolicies/$($item.resourceId)" `
+                -Headers $headers
 
-            # Get Profile Metadata
-            $profile = Invoke-RestMethod `
-                -Uri "https://graph.microsoft.com/beta/deviceManagement/configurationPolicies/$profileId" `
-                -Headers $headers `
-                -ErrorAction Stop
-
-            # Get Profile Settings
+            # Get policy settings
             $settings = Invoke-RestMethod `
-                -Uri "https://graph.microsoft.com/beta/deviceManagement/configurationPolicies/$profileId/settings?`$expand=settingInstance" `
-                -Headers $headers `
-                -ErrorAction Stop
+                -Uri "https://graph.microsoft.com/beta/deviceManagement/configurationPolicies/$($item.resourceId)/settings" `
+                -Headers $headers
 
-            # Parse Settings
             foreach ($setting in $settings.value) {
-                $instance = $setting.settingInstance
-                $results += [PSCustomObject]@{
-                    PolicySetName   = $policySet.value[0].displayName
-                    ProfileName     = $profile.name
-                    ProfileID       = $profile.id
-                    Platform        = $profile.platforms -join ", "
-                    Technology      = $profile.technologies -join ", "
-                    SettingID       = $instance.settingDefinitionId
-                    DataType        = $instance.'@odata.type'.Split('.')[-1]
-                    SimpleValue     = $instance.AdditionalProperties.value
-                    ComplexValue    = ($instance.AdditionalProperties | ConvertTo-Json -Depth 5)
-                    LastModified    = $profile.lastModifiedDateTime
-                    Created         = $profile.createdDateTime
+                [PSCustomObject]@{
+                    PolicySetName = $policySet.value.displayName
+                    ProfileName = $policy.name
+                    Platform = $policy.platforms -join ","
+                    Technology = $policy.technologies -join ","
+                    SettingID = $setting.settingInstance.settingDefinitionId
+                    DataType = $setting.settingInstance.'@odata.type'.Split('.')[-1]
+                    SimpleValue = $setting.settingInstance.AdditionalProperties.value
+                    JSONSettings = $setting.settingInstance.AdditionalProperties | ConvertTo-Json -Depth 5
                 }
             }
-            $current++
         }
         catch {
-            Write-Host "Error processing profile $profileId : $($_.Exception.Message)" -ForegroundColor Red
+            Write-Host "Error processing policy $($item.resourceId): $_" -ForegroundColor Red
         }
     }
 
     # Export to Excel
-    if ($results) {
-        Write-Host "`nExporting $($results.Count) settings to $outputPath" -ForegroundColor Cyan
-        $results | Export-Excel `
-            -Path $outputPath `
-            -WorksheetName "Settings" `
-            -TableName "IntuneSettings" `
-            -AutoSize `
-            -FreezeTopRow `
-            -BoldTopRow `
-            -ErrorAction Stop
-        
-        Write-Host "Export completed successfully!" -ForegroundColor Green
-        if (Test-Path $outputPath) {
-            Start-Process $outputPath
-        }
-    }
-    else {
-        Write-Host "No settings found to export" -ForegroundColor Yellow
-    }
+    $results | Export-Excel $outputPath -WorksheetName "Settings" -AutoSize -FreezeTopRow
+    Write-Host "Exported $($results.Count) settings to $outputPath" -ForegroundColor Green
 }
 catch {
-    Write-Host "`nFatal Error: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "Error: $_" -ForegroundColor Red
 }
 finally {
-    # Cleanup
-    Write-Host "`nDisconnecting from Microsoft Graph..." -ForegroundColor Cyan
     Disconnect-MgGraph -ErrorAction SilentlyContinue
-    Write-Host "Script execution completed" -ForegroundColor Cyan
 }
