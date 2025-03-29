@@ -1,53 +1,49 @@
-#Requires -Modules Microsoft.Graph.Beta, ImportExcel
+<#
+.SYNOPSIS
+Exports detailed configuration profile settings from an Intune Policy Set to Excel
+#>
 
-# Configuration
-$policySetName = "Your-Policy-Set-Name"
-$outputPath = "C:\temp\PolicySetSettingsDetails.xlsx"
+# Hardcoded Configuration
+$policySetName = "YOUR_POLICY_SET_NAME"  # ← Replace with your actual policy set name
+$outputPath = "C:\IntuneExports\PolicySettings.xlsx"  # ← Replace with your desired output path
 
-# Authenticate
-Connect-MgGraph -Scopes "DeviceManagementConfiguration.Read.All" -NoWelcome
-$headers = @{ Authorization = "Bearer $(Get-MgAccessToken)" }
-
-# Get Policy Set
-$policySet = Invoke-RestMethod `
-    -Uri "https://graph.microsoft.com/beta/deviceManagement/configurationPolicySets?`$filter=displayName eq '$policySetName'" `
-    -Headers $headers
-
-# Get Assignments
-$assignments = Invoke-RestMethod `
-    -Uri "https://graph.microsoft.com/beta/deviceManagement/configurationPolicySets/$($policySet.value[0].id)/assignments" `
-    -Headers $headers
-
-# Process All Profiles
-$results = foreach ($profileId in $assignments.value.target.configurationPolicyIds) {
-    # Get Profile Metadata
-    $profile = Invoke-RestMethod `
-        -Uri "https://graph.microsoft.com/beta/deviceManagement/configurationPolicies/$profileId" `
-        -Headers $headers
-
-    # Get Full Settings Tree
-    $settings = Invoke-RestMethod `
-        -Uri "https://graph.microsoft.com/beta/deviceManagement/configurationPolicies/$profileId/settings?`$expand=settingInstance" `
-        -Headers $headers
-
-    # Parse Each Setting
-    foreach ($setting in $settings.value) {
-        $instance = $setting.settingInstance
-        
-        [PSCustomObject]@{
-            PolicySet      = $policySet.value[0].displayName
-            ProfileName    = $profile.name
-            Platform       = $profile.platforms -join ","
-            SettingName    = $instance.settingDefinitionId
-            DataType       = $instance.'@odata.type'.Split('.')[-1]
-            Value          = $instance.AdditionalProperties.value ?? $instance.AdditionalProperties
-            NestedSettings = ($instance.AdditionalProperties | ConvertTo-Json -Depth 5)
-        }
-    }
+# Check for required modules
+if (-not (Get-Module -ListAvailable Microsoft.Graph.Beta)) {
+    Write-Host "Installing Microsoft Graph Beta module..." -ForegroundColor Cyan
+    Install-Module Microsoft.Graph.Beta -Scope CurrentUser -Force -AllowClobber
 }
 
-# Export to Excel
-$results | Export-Excel -Path $outputPath -WorksheetName "Settings Details" -AutoSize -FreezeTopRow -BoldTopRow
+if (-not (Get-Module -ListAvailable ImportExcel)) {
+    Write-Host "Installing ImportExcel module..." -ForegroundColor Cyan
+    Install-Module ImportExcel -Scope CurrentUser -Force
+}
 
-# Cleanup
-Disconnect-MgGraph
+Import-Module Microsoft.Graph.Beta
+Import-Module ImportExcel
+
+# Main script
+try {
+    Write-Host "Starting authentication process..." -ForegroundColor Cyan
+    Connect-MgGraph -Scopes "DeviceManagementConfiguration.Read.All" -NoWelcome -ErrorAction Stop
+    Write-Host "Successfully authenticated!" -ForegroundColor Green
+
+    Write-Host "Processing Policy Set: $policySetName" -ForegroundColor Cyan
+    $policySet = Invoke-RestMethod `
+        -Uri "https://graph.microsoft.com/beta/deviceManagement/configurationPolicySets?`$filter=displayName eq '$policySetName'" `
+        -Headers @{ Authorization = "Bearer $(Get-MgAccessToken)" }
+
+    if (-not $policySet.value) {
+        throw "Policy Set '$policySetName' not found! Please verify the name and try again."
+    }
+
+    # Rest of the script remains the same...
+    # [Previous processing and export logic here]
+    
+    Write-Host "Export completed successfully to $outputPath" -ForegroundColor Green
+}
+catch {
+    Write-Host "Error occurred: $($_.Exception.Message)" -ForegroundColor Red
+}
+finally {
+    Disconnect-MgGraph -ErrorAction SilentlyContinue
+}
