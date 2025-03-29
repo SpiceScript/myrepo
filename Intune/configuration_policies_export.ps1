@@ -1,13 +1,13 @@
-# Updated PowerShell script using latest Microsoft Graph API modules with extended logging and error handling
+# Updated PowerShell script using latest Microsoft Graph Beta API modules with extended logging and error handling
 
-# Ensure Microsoft Graph Module is installed
-if (-not (Get-Module -ListAvailable -Name Microsoft.Graph)) {
-    Write-Host "Microsoft Graph module not found. Installing..."
-    Install-Module Microsoft.Graph -Scope CurrentUser -Force
+# Ensure Microsoft Graph Beta Module is installed
+if (-not (Get-Module -ListAvailable -Name Microsoft.Graph.Beta)) {
+    Write-Host "Microsoft Graph Beta module not found. Installing..."
+    Install-Module Microsoft.Graph.Beta -Scope CurrentUser -Force
 }
-Import-Module Microsoft.Graph
+Import-Module Microsoft.Graph.Beta
 
-# Authenticate using Microsoft Graph SDK
+# Authenticate using Microsoft Graph Beta SDK
 function Get-GraphAuthToken {
     param (
         [string]$TenantId,
@@ -18,9 +18,9 @@ function Get-GraphAuthToken {
     $Scopes = @("DeviceManagementConfiguration.Read.All", "Group.Read.All")
     try {
         Connect-MgGraph -TenantId $TenantId -ClientId $ClientId -ClientSecret $ClientSecret -Scopes $Scopes
-        Write-Host "Successfully authenticated with Microsoft Graph."
+        Write-Host "Successfully authenticated with Microsoft Graph Beta."
     } catch {
-        Write-Host "Failed to authenticate with Microsoft Graph: $_" -ForegroundColor Red
+        Write-Host "Failed to authenticate with Microsoft Graph Beta: $_" -ForegroundColor Red
         exit
     }
 }
@@ -31,13 +31,13 @@ function Get-AssignedConfigurationPolicies {
         [string]$GroupName
     )
     Write-Host "Fetching assigned configuration policies for AD group: $GroupName"
-    $Group = Get-MgGroup -Filter "displayName eq '$GroupName'"
+    $Group = Get-MgBetaGroup -Filter "displayName eq '$GroupName'"
     if (-not $Group) {
         Write-Host "AD Group not found." -ForegroundColor Red
         exit
     }
     $GroupId = $Group.Id
-    $policies = Get-MgDeviceManagementConfigurationPolicy | Where-Object { $_.Assignments -match $GroupId }
+    $policies = Get-MgBetaDeviceManagementConfigurationPolicy | Where-Object { $_.Assignments -match $GroupId }
     return $policies
 }
 
@@ -48,10 +48,10 @@ function Get-PolicySettings {
     )
     Write-Host "Fetching settings for policy ID: $PolicyId"
     try {
-        $settings = Get-MgDeviceManagementConfigurationSetting -DeviceManagementConfigurationPolicyId $PolicyId
+        $settings = Get-MgBetaDeviceManagementConfigurationPolicySetting -DeviceManagementConfigurationPolicyId $PolicyId
         return $settings
     } catch {
-        Write-Host "Error fetching settings for policy $PolicyId: $_" -ForegroundColor Red
+        Write-Host "Error fetching settings for policy ID $PolicyId: $_" -ForegroundColor Red
         return $null
     }
 }
