@@ -1,60 +1,91 @@
-<#
-.SYNOPSIS
-Exports Intune Policy Set configuration details using interactive authentication
-#>
+# Install necessary modules (if not already installed)
+# Install-Module Microsoft.Graph.Intune, ImportExcel -Force
 
-# Install required modules if missing
-if (-not (Get-Module -ListAvailable Microsoft.Graph.Beta)) {
-    Install-Module Microsoft.Graph.Beta -Scope CurrentUser -Force
-}
-if (-not (Get-Module -ListAvailable ImportExcel)) {
-    Install-Module ImportExcel -Scope CurrentUser -Force
-}
-
-Import-Module Microsoft.Graph.Beta
+# Import required modules
+Import-Module Microsoft.Graph.Intune
 Import-Module ImportExcel
 
+# 1. Authenticate interactively
 try {
-    # Interactive authentication
-    Write-Host "Sign in with your Intune admin credentials..." -ForegroundColor Cyan
-    Connect-MgGraph -Scopes "DeviceManagementConfiguration.Read.All" -NoWelcome
-
-    # Get Policy Set details
-    $policySetName = Read-Host "Enter Policy Set name"
-    $policySet = Get-MgBetaDeviceAppManagementPolicySet -Filter "displayName eq '$policySetName'" -ExpandProperty "items"
-
-    if (-not $policySet) {
-        throw "Policy Set '$policySetName' not found"
-    }
-
-    # Process configuration policies
-    $results = foreach ($item in $policySet.Items) {
-        if ($item.ResourceType -eq "Microsoft.Management.Services.Api.DeviceConfiguration_ConfigurationPolicy") {
-            $policy = Get-MgBetaDeviceManagementConfigurationPolicy -DeviceManagementConfigurationPolicyId $item.ResourceId -ExpandProperty "settings"
-            
-            foreach ($setting in $policy.Settings) {
-                [PSCustomObject]@{
-                    PolicySetName = $policySet.DisplayName
-                    ProfileName = $policy.Name
-                    Platform = $policy.Platforms -join ","
-                    Technology = $policy.Technologies -join ","
-                    SettingID = $setting.SettingInstance.SettingDefinitionId
-                    DataType = $setting.SettingInstance.AdditionalProperties.'@odata.type'.Split('.')[-1]
-                    SimpleValue = $setting.SettingInstance.AdditionalProperties.value
-                    JSONValue = $setting.SettingInstance.AdditionalProperties | ConvertTo-Json -Depth 5
-                }
-            }
-        }
-    }
-
-    # Export to Excel
-    $outputPath = Read-Host "Enter output file path (e.g., C:\temp\PolicySettings.xlsx)"
-    $results | Export-Excel $outputPath -WorksheetName "Settings" -AutoSize -FreezeTopRow -BoldTopRow
-    Write-Host "Exported $($results.Count) settings to $outputPath" -ForegroundColor Green
+    Connect-MgGraph -Scopes "DeviceManagementConfiguration.Read.All","DeviceManagementApps.Read.All"
 }
 catch {
-    Write-Host "Error: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "Authentication failed. Please check your credentials and scopes."
+    Exit
 }
-finally {
-    Disconnect-MgGraph -ErrorAction SilentlyContinue
+
+# 2. Retrieve the policy set by name
+$policySetName = Read-Host "Enter the name of the Policy Set to retrieve"
+
+try {
+    $policySet = Get-MgDeviceAppManagementPolicySet | Where-Object {$_.DisplayName -eq $policySetName}
+
+    if (!$policySet) {
+        Write-Host "Policy Set with name '$policySetName' not found."
+        Exit
+    }
+
+    Write-Host "Successfully retrieved policy set: $($policySet.DisplayName)"
 }
+catch {
+    Write-Host "Error retrieving policy set: $($_.Exception.Message)"
+    Exit
+}
+
+# 3. Extract configuration policy IDs from the policy set's assignments
+try {
+    # Retrieve Policy Set Assignments
+    $policySetAssignments = Get-MgDeviceAppManagementPolicySetAssignment -PolicySetId $policySet.Id
+
+    # Filter only the assignments that target configuration policies
+    $configPolicyAssignments = $policySetAssignments | Where-Object {$_.Target -like "*deviceManagement/configurationPolicies/*"}
+
+    # Extract the Configuration Policy IDs from the target URLs
+    $configPolicyIds = $configPolicyAssignments.Target -replace '^.*?/deviceManagement/configurationPolicies/([a-f0-9-]{36}).*$', '$1' | Where-Object {$_.Length -eq 36}
+
+    Write-Host "Found $($configPolicyIds.Count) configuration policies assigned to the policy set."
+}
+catch {
+    Write-Host "Error extracting configuration policy IDs: $($_.Exception.Message)"
+    Exit
+}
+
+# 4. Get details and settings for each configuration policy
+$exportData = @()
+
+foreach ($configPolicyId in $configPolicyIds) {
+    try {
+        $configPolicy = Get-MgDeviceManagementConfigurationPolicy -DeviceManagementConfigurationPolicyId $configPolicyId
+
+        # Get Configuration Manager settings
+        $settings = Get-MgDeviceManagementConfigurationPolicySetting -DeviceManagementConfigurationPolicyId $configPolicyId
+        foreach ($setting in $settings) {
+
+            $exportObject = [PSCustomObject]@{
+                PolicySet          = $policySet.DisplayName
+                ProfileName        = $configPolicy.DisplayName
+                Platform           = $configPolicy.platform
+                SettingName        = $setting.settingDefinitionId  # Or another property that holds the setting ID
+                DataType           = $setting.DataType
+                Value              = $setting.value
+                NestedSettings     = $setting.AdditionalProperties # Capture all complex settings as JSON
+            }
+            $exportData += $exportObject
+        }
+
+    }
+    catch {
+        Write-Host "Error retrieving configuration policy details for ID '$configPolicyId': $($_.Exception.Message)"
+    }
+}
+
+# 5. Export to Excel
+try {
+    $exportData | Export-Excel -Path ".\PolicySetConfigurationPolicies.xlsx" -AutoSize -BoldTopRow
+    Write-Host "Successfully exported data to PolicySetConfigurationPolicies.xlsx"
+}
+catch {
+    Write-Host "Error exporting to Excel: $($_.Exception.Message)"
+}
+
+Write-Host "Script completed."
