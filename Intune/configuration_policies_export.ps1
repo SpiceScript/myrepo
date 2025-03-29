@@ -1,42 +1,33 @@
-# Updated PowerShell script using Microsoft Graph module
+# Updated PowerShell script using latest Microsoft Graph API modules with extended logging and error handling
 
-# Check and Import Required Module
+# Ensure Microsoft Graph Module is installed
 if (-not (Get-Module -ListAvailable -Name Microsoft.Graph)) {
     Write-Host "Microsoft Graph module not found. Installing..."
     Install-Module Microsoft.Graph -Scope CurrentUser -Force
 }
 Import-Module Microsoft.Graph
 
-# Function to authenticate using Microsoft Graph PowerShell SDK
+# Authenticate using Microsoft Graph SDK
 function Get-GraphAuthToken {
-    [cmdletbinding()]
     param (
-        [Parameter(Mandatory = $true)]
         [string]$TenantId,
-        
-        [Parameter(Mandatory = $true)]
         [string]$ClientId,
-        
-        [Parameter(Mandatory = $true)]
         [string]$ClientSecret
     )
     
-    # Connect to Microsoft Graph
-    $Scopes = @("https://graph.microsoft.com/.default")
-    Connect-MgGraph -TenantId $TenantId -ClientId $ClientId -ClientSecret $ClientSecret -Scopes $Scopes
-    
-    if ($global:GraphContext) {
-        Write-Host "Connected to Microsoft Graph."
-    } else {
-        Write-Host "Failed to authenticate with Microsoft Graph." -ForegroundColor Red
+    $Scopes = @("DeviceManagementConfiguration.Read.All", "Group.Read.All")
+    try {
+        Connect-MgGraph -TenantId $TenantId -ClientId $ClientId -ClientSecret $ClientSecret -Scopes $Scopes
+        Write-Host "Successfully authenticated with Microsoft Graph."
+    } catch {
+        Write-Host "Failed to authenticate with Microsoft Graph: $_" -ForegroundColor Red
         exit
     }
 }
 
-# Function to get assigned configuration profiles for an AD group
+# Fetch assigned configuration profiles for a specific AD group
 function Get-AssignedConfigurationPolicies {
     param (
-        [Parameter(Mandatory = $true)]
         [string]$GroupName
     )
     Write-Host "Fetching assigned configuration policies for AD group: $GroupName"
@@ -46,56 +37,70 @@ function Get-AssignedConfigurationPolicies {
         exit
     }
     $GroupId = $Group.Id
-    $policies = Get-MgBetaDeviceManagementConfigurationPolicyAssignment | Where-Object { $_.Target.GroupId -eq $GroupId }
+    $policies = Get-MgDeviceManagementConfigurationPolicy | Where-Object { $_.Assignments -match $GroupId }
     return $policies
 }
 
-# Function to get settings for a specific policy
+# Retrieve settings from a given policy
 function Get-PolicySettings {
     param (
-        [Parameter(Mandatory = $true)]
         [string]$PolicyId
     )
-    Write-Host "Fetching settings for policy: $PolicyId"
-    $settings = Get-MgBetaDeviceManagementConfigurationPolicySetting -PolicyId $PolicyId
-    return $settings
+    Write-Host "Fetching settings for policy ID: $PolicyId"
+    try {
+        $settings = Get-MgDeviceManagementConfigurationSetting -DeviceManagementConfigurationPolicyId $PolicyId
+        return $settings
+    } catch {
+        Write-Host "Error fetching settings for policy $PolicyId: $_" -ForegroundColor Red
+        return $null
+    }
 }
 
-# Export settings to Excel
+# Export settings to Excel with enhanced formatting
 function Export-ToExcel {
     param (
-        [Parameter(Mandatory = $true)]
         [Array]$Data,
-        
-        [Parameter(Mandatory = $true)]
         [string]$FilePath
     )
     if (-not (Get-Module -ListAvailable -Name ImportExcel)) {
         Install-Module -Name ImportExcel -Scope CurrentUser -Force
     }
     Import-Module ImportExcel
-    $Data | Export-Excel -Path $FilePath -AutoSize -TableName "ConfigurationSettings"
-    Write-Host "Settings exported successfully to $FilePath"
+    
+    if ($Data.Count -eq 0) {
+        Write-Host "No data to export." -ForegroundColor Yellow
+        return
+    }
+    
+    try {
+        $Data | Export-Excel -Path $FilePath -AutoSize -TableName "ConfigurationSettings" -BoldTopRow -FreezeTopRow
+        Write-Host "Exported settings to $FilePath successfully."
+    } catch {
+        Write-Host "Failed to export to Excel: $_" -ForegroundColor Red
+    }
 }
 
 # Hardcoded AD Group Name
 $GroupName = "ADGROUP"
 $ExportPath = "SettingsCatalog_Export.xlsx"
 
-# Main execution
+# Authentication Credentials
 $TenantId = "your-tenant-id"
 $ClientId = "your-client-id"
 $ClientSecret = "your-client-secret"
 
+# Execute script
 Get-GraphAuthToken -TenantId $TenantId -ClientId $ClientId -ClientSecret $ClientSecret
 $AssignedPolicies = Get-AssignedConfigurationPolicies -GroupName $GroupName
 
-# Loop through each assigned policy and fetch settings
+# Collect settings from each assigned policy
 $AllSettings = @()
 foreach ($policy in $AssignedPolicies) {
     $policyId = $policy.Id
     $settings = Get-PolicySettings -PolicyId $policyId
-    $AllSettings += $settings
+    if ($settings) {
+        $AllSettings += $settings
+    }
 }
 
 # Export settings to Excel
