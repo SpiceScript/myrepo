@@ -2,66 +2,94 @@
 
 <#
 .SYNOPSIS
-Exports Intune configuration profile settings using interactive authentication
+Exports Intune configuration profile settings with proper authentication handling
 #>
 
-# Configuration - Set your profile IDs here
+# Configuration - Replace with your policy IDs
 $profileIds = @(
-    "YOUR-POLICY-ID-1",
-    "YOUR-POLICY-ID-2"
+    "deviceConfiguration--bitLockerEnabled",
+    "deviceConfiguration--passcodeRequired"
 )
 
-try {
-    # 1. Interactive Authentication
-    Write-Host "Sign in with your Intune admin credentials..." -ForegroundColor Cyan
-    Connect-MgGraph -Scopes "DeviceManagementConfiguration.Read.All" -NoWelcome
-    $token = (Get-MgContext).AccessToken
-    $headers = @{ Authorization = "Bearer $token" }
+function Get-ValidAuthToken {
+    # Ensure fresh authentication context
+    try {
+        $context = Get-MgContext
+        if (-not $context -or $context.Scopes -notcontains "DeviceManagementConfiguration.Read.All") {
+            Connect-MgGraph -Scopes "DeviceManagementConfiguration.Read.All" -NoWelcome
+        }
+        return (Get-MgContext).AccessToken
+    }
+    catch {
+        throw "Authentication failed: $_"
+    }
+}
 
-    # 2. Process each profile
+try {
+    # 1. Initialize authentication
+    Write-Host "Starting authentication..." -ForegroundColor Cyan
+    $token = Get-ValidAuthToken
+    $headers = @{
+        Authorization = "Bearer $token"
+        ContentType = "application/json"
+    }
+
+    # 2. Process profiles with token refresh
     $results = foreach ($policyId in $profileIds) {
         try {
-            Write-Host "Processing profile: $policyId" -ForegroundColor Cyan
+            Write-Host "Processing: $policyId" -ForegroundColor Cyan
             
+            # Refresh token if needed
+            if ((Get-Date) -gt (Get-MgContext).TokenExpiration) {
+                $token = Get-ValidAuthToken
+                $headers.Authorization = "Bearer $token"
+            }
+
             # Get policy details
             $policy = Invoke-RestMethod `
                 -Uri "https://graph.microsoft.com/beta/deviceManagement/configurationPolicies/$policyId" `
                 -Headers $headers `
-                -ErrorAction Stop
+                -Method Get
 
-            # Get settings using the exact endpoint format you specified
+            # Get settings
             $settings = Invoke-RestMethod `
                 -Uri "https://graph.microsoft.com/beta/deviceManagement/configurationPolicies/$policyId/settings" `
                 -Headers $headers `
-                -ErrorAction Stop
+                -Method Get
 
-            # Process settings
             foreach ($setting in $settings.value) {
                 $instance = $setting.settingInstance
+                $simpleValue = $instance.additionalProperties.value
                 
                 [PSCustomObject]@{
                     ProfileName = $policy.name
                     Platform = $policy.platforms -join ", "
                     SettingName = $instance.settingDefinitionId
                     DataType = $instance.'@odata.type'.Split('.')[-1]
-                    Value = $instance.additionalProperties.value ?? $null
+                    Value = if ($simpleValue) { $simpleValue } else { $null }
                     NestedSettings = ($instance.additionalProperties | 
-                        Where-Object { $_.Keys -ne "value" } |
+                        Where-Object { $_ -ne $simpleValue } |
                         ConvertTo-Json -Depth 5)
                 }
             }
         }
         catch {
             Write-Host "Error processing $policyId : $($_.Exception.Message)" -ForegroundColor Red
+            if ($_.Exception.Response) {
+                $errorStream = $_.Exception.Response.GetResponseStream()
+                $reader = New-Object System.IO.StreamReader($errorStream)
+                $responseBody = $reader.ReadToEnd()
+                Write-Host "API Response: $responseBody" -ForegroundColor Yellow
+            }
         }
     }
 
-    # 3. Export to Excel
-    $outputPath = Join-Path $env:USERPROFILE "Desktop\ConfigSettingsExport.xlsx"
+    # 3. Export results
+    $outputPath = Join-Path $env:USERPROFILE "Desktop\ConfigSettings_$(Get-Date -Format 'yyyyMMdd-HHmmss').xlsx"
     $results | Export-Excel $outputPath -WorksheetName "Settings" -AutoSize -FreezeTopRow -BoldTopRow
-    Write-Host "Exported $($results.Count) settings to $outputPath" -ForegroundColor Green
+    Write-Host "Successfully exported to $outputPath" -ForegroundColor Green
 
-    # Open the result
+    # Open the file
     if (Test-Path $outputPath) {
         Start-Process $outputPath
     }
