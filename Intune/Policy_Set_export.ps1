@@ -1,91 +1,93 @@
 # Install necessary modules (if not already installed)
-# Install-Module Microsoft.Graph.Intune, ImportExcel -Force
+# Install-Module -Name ImportExcel -Force
 
 # Import required modules
-Import-Module Microsoft.Graph.Intune
 Import-Module ImportExcel
 
-# 1. Authenticate interactively
+# Authenticate interactively using Connect-MSGraph
 try {
-    Connect-MgGraph -Scopes "DeviceManagementConfiguration.Read.All","DeviceManagementApps.Read.All"
-}
-catch {
-    Write-Host "Authentication failed. Please check your credentials and scopes."
+    Connect-MSGraph
+    Write-Host "Successfully authenticated to Microsoft Graph."
+} catch {
+    Write-Error "Failed to authenticate with Microsoft Graph: $_"
     Exit
 }
 
-# 2. Retrieve the policy set by name
+# Base URLs for Microsoft Graph API
+$policySetsUrl = "https://graph.microsoft.com/beta/deviceAppManagement/policySets"
+$configPoliciesUrl = "https://graph.microsoft.com/beta/deviceManagement/configurationPolicies"
+
+# Prompt user for the Policy Set name
 $policySetName = Read-Host "Enter the name of the Policy Set to retrieve"
 
+# Retrieve all Policy Sets and find the one matching the specified name
 try {
-    $policySet = Get-MgDeviceAppManagementPolicySet | Where-Object {$_.DisplayName -eq $policySetName}
+    $policySetsResponse = Invoke-RestMethod -Uri $policySetsUrl -Method Get -Headers @{Authorization = "Bearer $($Global:MSALAccessToken)"}
+    $policySet = $policySetsResponse.value | Where-Object { $_.displayName -eq $policySetName }
 
-    if (!$policySet) {
-        Write-Host "Policy Set with name '$policySetName' not found."
+    if (-not $policySet) {
+        Write-Error "Policy Set with name '$policySetName' not found."
         Exit
     }
 
-    Write-Host "Successfully retrieved policy set: $($policySet.DisplayName)"
-}
-catch {
-    Write-Host "Error retrieving policy set: $($_.Exception.Message)"
+    Write-Host "Successfully retrieved Policy Set: $($policySet.displayName)"
+} catch {
+    Write-Error "Failed to retrieve Policy Sets: $_"
     Exit
 }
 
-# 3. Extract configuration policy IDs from the policy set's assignments
-try {
-    # Retrieve Policy Set Assignments
-    $policySetAssignments = Get-MgDeviceAppManagementPolicySetAssignment -PolicySetId $policySet.Id
-
-    # Filter only the assignments that target configuration policies
-    $configPolicyAssignments = $policySetAssignments | Where-Object {$_.Target -like "*deviceManagement/configurationPolicies/*"}
-
-    # Extract the Configuration Policy IDs from the target URLs
-    $configPolicyIds = $configPolicyAssignments.Target -replace '^.*?/deviceManagement/configurationPolicies/([a-f0-9-]{36}).*$', '$1' | Where-Object {$_.Length -eq 36}
-
-    Write-Host "Found $($configPolicyIds.Count) configuration policies assigned to the policy set."
+# Extract configuration policy IDs from the Policy Set's items
+$configPolicyIds = @()
+foreach ($item in $policySet.items) {
+    if ($item.payloadType -eq "configurationPolicies") {
+        $configPolicyIds += ($item.payloadId)
+    }
 }
-catch {
-    Write-Host "Error extracting configuration policy IDs: $($_.Exception.Message)"
+
+if (-not $configPolicyIds) {
+    Write-Error "No configuration policies found in the Policy Set."
     Exit
 }
 
-# 4. Get details and settings for each configuration policy
+Write-Host "Found $($configPolicyIds.Count) configuration policies in the Policy Set."
+
+# Retrieve details and settings for each Configuration Policy
 $exportData = @()
 
 foreach ($configPolicyId in $configPolicyIds) {
     try {
-        $configPolicy = Get-MgDeviceManagementConfigurationPolicy -DeviceManagementConfigurationPolicyId $configPolicyId
-
-        # Get Configuration Manager settings
-        $settings = Get-MgDeviceManagementConfigurationPolicySetting -DeviceManagementConfigurationPolicyId $configPolicyId
-        foreach ($setting in $settings) {
-
+        # Get configuration policy details
+        $configPolicyResponse = Invoke-RestMethod -Uri "$configPoliciesUrl/$configPolicyId" -Method Get -Headers @{Authorization = "Bearer $($Global:MSALAccessToken)"}
+        
+        # Get settings for this configuration policy
+        $settingsResponse = Invoke-RestMethod -Uri "$configPoliciesUrl/$configPolicyId/settings" -Method Get -Headers @{Authorization = "Bearer $($Global:MSALAccessToken)"}
+        
+        foreach ($setting in $settingsResponse.value) {
+            # Prepare data for export
             $exportObject = [PSCustomObject]@{
-                PolicySet          = $policySet.DisplayName
-                ProfileName        = $configPolicy.DisplayName
-                Platform           = $configPolicy.platform
-                SettingName        = $setting.settingDefinitionId  # Or another property that holds the setting ID
-                DataType           = $setting.DataType
-                Value              = $setting.value
-                NestedSettings     = $setting.AdditionalProperties # Capture all complex settings as JSON
+                PolicySet       = $policySet.displayName
+                ProfileName     = $configPolicyResponse.displayName
+                Platform        = $configPolicyResponse.platforms -join ", "
+                SettingName     = $setting.settingDefinitionId
+                DataType        = $setting["@odata.type"]
+                Value           = $setting.value | Out-String
+                NestedSettings  = ($setting.additionalData | ConvertTo-Json -Depth 10)
             }
             $exportData += $exportObject
         }
-
-    }
-    catch {
-        Write-Host "Error retrieving configuration policy details for ID '$configPolicyId': $($_.Exception.Message)"
+    } catch {
+        Write-Warning "Failed to retrieve details or settings for Configuration Policy ID '$configPolicyId': $_"
     }
 }
 
-# 5. Export to Excel
+# Export data to Excel
+$outputFilePath = ".\PolicySetConfigurationPolicies.xlsx"
+
 try {
-    $exportData | Export-Excel -Path ".\PolicySetConfigurationPolicies.xlsx" -AutoSize -BoldTopRow
-    Write-Host "Successfully exported data to PolicySetConfigurationPolicies.xlsx"
-}
-catch {
-    Write-Host "Error exporting to Excel: $($_.Exception.Message)"
+    $exportData | Export-Excel -Path $outputFilePath -AutoSize -BoldTopRow
+    Write-Host "Successfully exported data to Excel file: $outputFilePath"
+} catch {
+    Write-Error "Failed to export data to Excel: $_"
 }
 
-Write-Host "Script completed."
+Write-Host "Script execution completed."
