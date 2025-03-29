@@ -1,5 +1,7 @@
 # PowerShell script to fetch all device configuration profiles assigned to an AD group using Microsoft Graph Beta API
 
+# PowerShell script to fetch all device configuration profiles assigned to an AD group using Microsoft Graph Beta API
+
 # Ensure Microsoft Graph Beta Module is installed
 if (-not (Get-Module -ListAvailable -Name Microsoft.Graph.Beta)) {
     Write-Host "Microsoft Graph Beta module not found. Installing..."
@@ -15,12 +17,15 @@ function Get-GraphAuthToken {
         [string]$ClientSecret
     )
     
-    $Scopes = @("DeviceManagementConfiguration.Read.All", "Group.Read.All")
+    $Scopes = @("https://graph.microsoft.com/.default")
     try {
-        Connect-MgGraph -TenantId $TenantId -ClientId $ClientId -ClientSecret $ClientSecret -Scopes $Scopes
+        $SecureClientSecret = ConvertTo-SecureString $ClientSecret -AsPlainText -Force
+        $ClientSecretCredential = [System.Management.Automation.PSCredential]::new($ClientId, $SecureClientSecret)
+        
+        Connect-MgGraph -TenantId $TenantId -ClientId $ClientId -Credential $ClientSecretCredential -Scopes $Scopes
         Write-Host "Successfully authenticated with Microsoft Graph Beta."
     } catch {
-        Write-Host "Failed to authenticate with Microsoft Graph Beta: $_" -ForegroundColor Red
+        Write-Host ("Failed to authenticate with Microsoft Graph Beta: {0}" -f $_.Exception.Message) -ForegroundColor Red
         exit
     }
 }
@@ -31,16 +36,20 @@ function Get-AssignedConfigurationPolicies {
         [string]$GroupName
     )
     Write-Host "Fetching assigned configuration policies for AD group: $GroupName"
-    $Group = Get-MgBetaGroup -Filter "displayName eq '$GroupName'"
-    if (-not $Group) {
-        Write-Host "AD Group not found." -ForegroundColor Red
-        exit
-    }
-    $GroupId = $Group.Id
-    $policies = Get-MgBetaDeviceManagementConfigurationPolicy | Where-Object { $_.Assignments -match $GroupId }
-    
-    foreach ($policy in $policies) {
-        Write-Host "Policy Name: $($policy.DisplayName), Policy ID: $($policy.Id)"
+    try {
+        $Group = Get-MgBetaGroup -Filter "displayName eq '$GroupName'"
+        if (-not $Group) {
+            Write-Host "AD Group not found." -ForegroundColor Red
+            exit
+        }
+        $GroupId = $Group.Id
+        $policies = Get-MgBetaDeviceManagementConfigurationPolicy | Where-Object { $_.Assignments -match $GroupId }
+        
+        foreach ($policy in $policies) {
+            Write-Host ("Policy Name: {0}, Policy ID: {1}" -f $policy.DisplayName, $policy.Id)
+        }
+    } catch {
+        Write-Host ("Error fetching policies: {0}" -f $_.Exception.Message) -ForegroundColor Red
     }
 }
 
@@ -48,9 +57,9 @@ function Get-AssignedConfigurationPolicies {
 $GroupName = "ADGROUP"
 
 # Authentication Credentials
-$TenantId = "your-tenant-id"
-$ClientId = "your-client-id"
-$ClientSecret = "your-client-secret"
+$TenantId = "35345wsdfs5345wersdsff"
+$ClientId = "35345wsdfs5345wersdsffw4345345"
+$ClientSecret = "35345wsdfs5345wersdsff3wefsdfw334"
 
 # Execute script
 Get-GraphAuthToken -TenantId $TenantId -ClientId $ClientId -ClientSecret $ClientSecret
