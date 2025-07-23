@@ -6,7 +6,7 @@
     • Uses Microsoft.Graph PowerShell SDK v1.0 (app-only, no interactive login).
     • Queries four endpoints for complete coverage.
     • Handles @odata.nextLink pagination with retry and error handling.
-    • Names each .json file exactly as the Intune DisplayName (sanitized).
+    • Names each .json file as `SanitizedDisplayName_ID.json` to avoid overwrites.
     • Requires Application permission DeviceManagementConfiguration.Read.All.
 #>
 
@@ -15,14 +15,18 @@ $ErrorActionPreference = 'Stop'
 $DebugPreference       = 'Continue'
 $VerbosePreference     = 'Continue'
 
-# Ensure Microsoft Graph modules are available
-
+# Import required Microsoft Graph modules
+Import-Module Microsoft.Graph.DeviceManagement.Configuration -ErrorAction Stop
+Import-Module Microsoft.Graph.DeviceManagement.DeviceConfigurations -ErrorAction Stop
+Import-Module Microsoft.Graph.DeviceManagement.GroupPolicyConfigurations -ErrorAction Stop
+Import-Module Microsoft.Graph.DeviceManagement.DeviceCompliancePolicies -ErrorAction Stop
+Import-Module Microsoft.Graph.Authentication -ErrorAction Stop
 #endregion
 
 #region Inline Credentials
-$TenantId     = "4323dfs"       # e.g., "abcd1234-...."
-$ClientId     = "sdfsdf453453"       # from your App registration
-$ClientSecret = "sdfsfs54345345"   # secure storage recommended
+$TenantId     = "YOUR_TENANT_ID"       # e.g., "abcd1234-...."
+$ClientId     = "YOUR_CLIENT_ID"       # from your App registration
+$ClientSecret = "YOUR_CLIENT_SECRET"   # secure storage recommended
 $ExportRoot   = "C:\IntuneExports"     # adjust as needed
 #endregion
 
@@ -33,14 +37,12 @@ Write-Verbose "Connecting to Microsoft Graph (app-only)..."
 $secureSecret = ConvertTo-SecureString -String $ClientSecret -AsPlainText -Force
 $clientCred   = New-Object System.Management.Automation.PSCredential ($ClientId, $secureSecret)
 
-# App-only auth using client secret credential (no -Scopes)
 Connect-MgGraph `
     -TenantId               $TenantId `
     -ClientSecretCredential $clientCred `
     -Verbose -Debug
 
 Write-Verbose "Authentication successful."
-
 #endregion
 
 #region Helper Functions
@@ -125,7 +127,10 @@ SafeInvoke {
             technologies = $p.technologies
             settings     = $settings
         }
-        $file = Join-Path $ExportRoot "SettingsCatalog" (SafeName $p.displayName + ".json")
+
+        $fileName = "{0}_{1}.json" -f (SafeName $p.displayName), $p.id
+        $file     = Join-Path $ExportRoot "SettingsCatalog" $fileName
+
         ExportJson -Object $exportObj -Path $file
     }
 }
@@ -137,7 +142,10 @@ SafeInvoke {
     foreach ($cfg in $deviceConfigs | Where-Object { $_.platform -match "windows" }) {
         Write-Host "Exporting Device Configuration: $($cfg.displayName)"
         $detail = Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/deviceManagement/deviceConfigurations/$($cfg.id)" -Debug
-        $file   = Join-Path $ExportRoot "DeviceConfigurations" (SafeName $cfg.displayName + ".json")
+
+        $fileName = "{0}_{1}.json" -f (SafeName $cfg.displayName), $cfg.id
+        $file     = Join-Path $ExportRoot "DeviceConfigurations" $fileName
+
         ExportJson -Object $detail -Path $file
     }
 }
@@ -155,7 +163,10 @@ SafeInvoke {
             description      = $gpo.description
             definitionValues = $defs
         }
-        $file = Join-Path $ExportRoot "AdminTemplates" (SafeName $gpo.displayName + ".json")
+
+        $fileName = "{0}_{1}.json" -f (SafeName $gpo.displayName), $gpo.id
+        $file     = Join-Path $ExportRoot "AdminTemplates" $fileName
+
         ExportJson -Object $exportObj -Path $file
     }
 }
@@ -167,7 +178,10 @@ SafeInvoke {
     foreach ($cp in $compPolicies | Where-Object { $_.platform -match "windows" }) {
         Write-Host "Exporting Compliance Policy: $($cp.displayName)"
         $detail = Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/deviceManagement/deviceCompliancePolicies/$($cp.id)" -Debug
-        $file   = Join-Path $ExportRoot "Compliance" (SafeName $cp.displayName + ".json")
+
+        $fileName = "{0}_{1}.json" -f (SafeName $cp.displayName), $cp.id
+        $file     = Join-Path $ExportRoot "Compliance" $fileName
+
         ExportJson -Object $detail -Path $file
     }
 }
