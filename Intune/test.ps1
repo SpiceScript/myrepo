@@ -1,190 +1,395 @@
-<#
-.SYNOPSIS
-    Export all Windows Intune configuration & compliance profiles to JSON.
 
-.DESCRIPTION
-    • Uses Microsoft.Graph PowerShell SDK v1.0 (app-only, no interactive login).
-    • Queries four endpoints for complete coverage.
-    • Handles @odata.nextLink pagination with retry and error handling.
-    • Names each .json file as `SanitizedDisplayName_ID.json` to avoid overwrites.
-    • Requires Application permission DeviceManagementConfiguration.Read.All.
+<#
+
+.COPYRIGHT
+Copyright (c) Microsoft Corporation. All rights reserved. Licensed under the MIT license.
+See LICENSE in the project root for license information.
+
 #>
 
-#region Global Preferences & Module Imports
-$ErrorActionPreference = 'Stop'
-$DebugPreference       = 'Continue'
-$VerbosePreference     = 'Continue'
+####################################################
+function Get-AuthToken {
+    Write-Host "Checking for MSAL module…"
+    $MsalModule = Get-Module -Name "MSAL.PS" -ListAvailable
 
-# Import required Microsoft Graph modules
-Import-Module Microsoft.Graph.DeviceManagement.Configuration -ErrorAction Stop
-Import-Module Microsoft.Graph.DeviceManagement.DeviceConfigurations -ErrorAction Stop
-Import-Module Microsoft.Graph.DeviceManagement.GroupPolicyConfigurations -ErrorAction Stop
-Import-Module Microsoft.Graph.DeviceManagement.DeviceCompliancePolicies -ErrorAction Stop
-Import-Module Microsoft.Graph.Authentication -ErrorAction Stop
-#endregion
+    if (-not $MsalModule) {
+        Write-Host "MSAL.PS PowerShell module not found, installing..."
+        Install-Module -Name "MSAL.PS" -Scope CurrentUser -Force -AllowClobber
+    }
 
-#region Inline Credentials
-$TenantId     = "YOUR_TENANT_ID"       # e.g., "abcd1234-...."
-$ClientId     = "YOUR_CLIENT_ID"       # from your App registration
-$ClientSecret = "YOUR_CLIENT_SECRET"   # secure storage recommended
-$ExportRoot   = "C:\IntuneExports"     # adjust as needed
-#endregion
+    $clientId     = "sdfsdf45345"
+    $tenantId     = "34534535435"
+    $clientSecret = ConvertTo-SecureString "fsdfvxvcv" -AsPlainText -Force
+
+    $authority = "https://login.microsoftonline.com/$tenantId"
+    $scopes    = "https://graph.microsoft.com/.default"
+
+    try {
+        $authResult = Get-MsalToken -ClientId $clientId `
+                                    -TenantId $tenantId `
+                                    -ClientSecret $clientSecret `
+                                    -Authority $authority `
+                                    -Scopes $scopes
+
+        if ($authResult.AccessToken) {
+            $authHeader = @{
+                'Content-Type'  = 'application/json'
+                'Authorization' = "Bearer $($authResult.AccessToken)"
+                'ExpiresOn'     = $authResult.ExpiresOn
+            }
+
+            return $authHeader
+        } else {
+            Write-Host "`nAuthorization Access Token is null, please check credentials..." -ForegroundColor Red
+        }
+    }
+    catch {
+        Write-Host "`nError during authentication:" -ForegroundColor Red
+        Write-Host $_.Exception.Message -ForegroundColor Red
+    }
+}
+
+####################################################
+
+Function Get-SettingsCatalogPolicy(){
+
+<#
+.SYNOPSIS
+This function is used to get Settings Catalog policies from the Graph API REST interface
+.DESCRIPTION
+The function connects to the Graph API Interface and gets any Settings Catalog policies
+.EXAMPLE
+Get-SettingsCatalogPolicy
+Returns any Settings Catalog policies configured in Intune
+Get-SettingsCatalogPolicy -Platform windows10
+Returns any Windows 10 Settings Catalog policies configured in Intune
+Get-SettingsCatalogPolicy -Platform macOS
+Returns any MacOS Settings Catalog policies configured in Intune
+.NOTES
+NAME: Get-SettingsCatalogPolicy
+#>
+
+[cmdletbinding()]
+
+param
+(
+ [parameter(Mandatory=$false)]
+ [ValidateSet("windows10","macOS")]
+ [ValidateNotNullOrEmpty()]
+ [string]$Platform
+)
+
+$graphApiVersion = "beta"
+
+    if($Platform){
+        
+        $Resource = "deviceManagement/configurationPolicies?`$filter=platforms has '$Platform' and technologies has 'mdm'"
+
+    }
+
+    else {
+
+        $Resource = "deviceManagement/configurationPolicies?`$filter=technologies has 'mdm'"
+
+    }
+
+   try {
+    $uri = "https://graph.microsoft.com/$graphApiVersion/$($Resource)"
+    (Invoke-RestMethod -Uri $uri -Headers $authToken -Method Get).Value
+}
+catch {
+    $ex = $_.Exception
+
+    # Try to extract the response content safely
+    $responseBody = $null
+    if ($ex.Response -is [System.Net.HttpWebResponse]) {
+        try {
+            $stream = $ex.Response.GetResponseStream()
+            $reader = New-Object System.IO.StreamReader($stream)
+            $responseBody = $reader.ReadToEnd()
+        } catch {
+            $responseBody = "Unable to read response stream."
+        }
+    } elseif ($ex.Response -and $ex.Response.Content) {
+        try {
+            $responseBody = $ex.Response.Content.ReadAsStringAsync().GetAwaiter().GetResult()
+        } catch {
+            $responseBody = "Unable to read response content (possibly disposed)."
+        }
+    }
+
+    Write-Host "Response content:`n$responseBody" -ForegroundColor Red
+    Write-Error "Request to $uri failed with HTTP Status: $($ex.Response.StatusCode) $($ex.Response.ReasonPhrase)"
+    break
+}
+
+
+}
+
+####################################################
+
+Function Get-SettingsCatalogPolicySettings(){
+
+<#
+.SYNOPSIS
+This function is used to get Settings Catalog policy Settings from the Graph API REST interface
+.DESCRIPTION
+The function connects to the Graph API Interface and gets any Settings Catalog policy Settings
+.EXAMPLE
+Get-SettingsCatalogPolicySettings -policyid policyid
+Returns any Settings Catalog policy Settings configured in Intune
+.NOTES
+NAME: Get-SettingsCatalogPolicySettings
+#>
+
+[cmdletbinding()]
+
+param
+(
+    [Parameter(Mandatory=$true)]
+    [ValidateNotNullOrEmpty()]
+    $policyid
+)
+
+$graphApiVersion = "beta"
+$Resource = "deviceManagement/configurationPolicies('$policyid')/settings?`$expand=settingDefinitions"
+
+    try {
+
+        $uri = "https://graph.microsoft.com/$graphApiVersion/$($Resource)"
+
+        $Response = (Invoke-RestMethod -Uri $uri -Headers $authToken -Method Get)
+
+        $AllResponses = $Response.value
+     
+        $ResponseNextLink = $Response."@odata.nextLink"
+
+        while ($ResponseNextLink -ne $null){
+
+            $Response = (Invoke-RestMethod -Uri $ResponseNextLink -Headers $authToken -Method Get)
+            $ResponseNextLink = $Response."@odata.nextLink"
+            $AllResponses += $Response.value
+
+        }
+
+        return $AllResponses
+
+    }
+
+    catch {
+
+    $ex = $_.Exception
+    $errorResponse = $ex.Response.GetResponseStream()
+    $reader = New-Object System.IO.StreamReader($errorResponse)
+    $reader.BaseStream.Position = 0
+    $reader.DiscardBufferedData()
+    $responseBody = $reader.ReadToEnd();
+    Write-Host "Response content:`n$responseBody" -f Red
+    Write-Error "Request to $Uri failed with HTTP Status $($ex.Response.StatusCode) $($ex.Response.StatusDescription)"
+    write-host
+    break
+
+    }
+
+}
+
+####################################################
+
+Function Export-JSONData(){
+
+<#
+.SYNOPSIS
+This function is used to export JSON data returned from Graph
+.DESCRIPTION
+This function is used to export JSON data returned from Graph
+.EXAMPLE
+Export-JSONData -JSON $JSON
+Export the JSON inputted on the function
+.NOTES
+NAME: Export-JSONData
+#>
+
+param (
+
+$JSON,
+$ExportPath
+
+)
+
+    try {
+
+        if($JSON -eq "" -or $JSON -eq $null){
+
+            write-host "No JSON specified, please specify valid JSON..." -f Red
+
+        }
+
+        elseif(!$ExportPath){
+
+            write-host "No export path parameter set, please provide a path to export the file" -f Red
+
+        }
+
+        elseif(!(Test-Path $ExportPath)){
+
+            write-host "$ExportPath doesn't exist, can't export JSON Data" -f Red
+
+        }
+
+        else {
+
+            $JSON1 = ConvertTo-Json $JSON -Depth 20
+
+            $JSON_Convert = $JSON1 | ConvertFrom-Json
+
+            $displayName = $JSON_Convert.name
+
+            # Updating display name to follow file naming conventions - https://msdn.microsoft.com/en-us/library/windows/desktop/aa365247%28v=vs.85%29.aspx
+            $DisplayName = $DisplayName -replace '\<|\>|:|"|/|\\|\||\?|\*', "_"
+
+            $FileName_JSON = "$DisplayName" + "_" + $(get-date -f dd-MM-yyyy-H-mm-ss) + ".json"
+
+            write-host "Export Path:" "$ExportPath"
+
+            $JSON1 | Set-Content -LiteralPath "$ExportPath\$FileName_JSON"
+            write-host "JSON created in $ExportPath\$FileName_JSON..." -f cyan
+            
+        }
+
+    }
+
+    catch {
+
+    $_.Exception
+
+    }
+
+}
+
+####################################################
 
 #region Authentication
-Write-Verbose "Connecting to Microsoft Graph (app-only)..."
 
-# Convert ClientSecret to SecureString and create PSCredential
-$secureSecret = ConvertTo-SecureString -String $ClientSecret -AsPlainText -Force
-$clientCred   = New-Object System.Management.Automation.PSCredential ($ClientId, $secureSecret)
+write-host
 
-Connect-MgGraph `
-    -TenantId               $TenantId `
-    -ClientSecretCredential $clientCred `
-    -Verbose -Debug
+# Checking if authToken exists before running authentication
+if($global:authToken){
 
-Write-Verbose "Authentication successful."
-#endregion
+    # Setting DateTime to Universal time to work in all timezones
+    $DateTime = (Get-Date).ToUniversalTime()
 
-#region Helper Functions
+    # If the authToken exists checking when it expires
+    $TokenExpires = ($authToken.ExpiresOn.datetime - $DateTime).Minutes
 
-function SafeName {
-    param([string]$Name)
-    $sanitized = $Name -replace '[\\\/:*?"<>|]','_'
-    return $sanitized.TrimEnd('.',' ')
-}
+        if($TokenExpires -le 0){
 
-function ExportJson {
-    param(
-        [Parameter(Mandatory)][object]$Object,
-        [Parameter(Mandatory)][string]$Path
-    )
-    $folder = Split-Path $Path
-    if (-not (Test-Path $folder)) {
-        Write-Verbose "Creating folder: $folder"
-        New-Item -ItemType Directory -Path $folder -Force | Out-Null
-    }
-    Write-Verbose "Writing JSON to $Path"
-    $Object | ConvertTo-Json -Depth 20 | Out-File -FilePath $Path -Encoding utf8
-}
+        write-host "Authentication Token expired" $TokenExpires "minutes ago" -ForegroundColor Yellow
+        write-host
 
-function Get-MgPaged {
-    param([Parameter(Mandatory)][string]$RelativeUri)
-    $baseUrl = "https://graph.microsoft.com/v1.0/"
-    $items   = @()
-    $next    = $RelativeUri
+            # Defining User Principal Name if not present
 
-    while ($next) {
-        Write-Verbose "Requesting: $baseUrl$next"
-        try {
-            $response = Invoke-MgGraphRequest -Method GET -Uri ($baseUrl + $next) -Debug
-        } catch {
-            Write-Warning "Request failed for '$next': $_"
-            break
+            if($User -eq $null -or $User -eq ""){
+
+            $User = Read-Host -Prompt "Please specify your user principal name for Azure Authentication"
+            Write-Host
+
+            }
+
+        $global:authToken = Get-AuthToken -User $User
+
         }
-        if (-not $response.value) {
-            Write-Warning "No 'value' array returned from '$next'."
-            break
-        }
-        $items += $response.value
-        if ($response.'@odata.nextLink') {
-            $next = $response.'@odata.nextLink' -replace '^https://graph.microsoft.com/v1.0/',''
-        } else {
-            $next = $null
-        }
+}
+
+# Authentication doesn't exist, calling Get-AuthToken function
+
+else {
+
+    if($User -eq $null -or $User -eq ""){
+
+    $User = Read-Host -Prompt "Please specify your user principal name for Azure Authentication"
+    Write-Host
+
     }
 
-    return $items
+# Getting the authorization token
+$global:authToken = Get-AuthToken -User $User
+
 }
 
-function SafeInvoke {
-    param([ScriptBlock]$Block)
-    try {
-        & $Block
-    } catch {
-        Write-Error "Error in block: $_"
-    }
-}
 #endregion
 
-#region Ensure Export Root
-if (-not (Test-Path $ExportRoot)) {
-    Write-Verbose "Creating export root: $ExportRoot"
-    New-Item -ItemType Directory -Path $ExportRoot -Force | Out-Null
-}
-#endregion
+####################################################
 
-#region Export: Settings Catalog
-SafeInvoke {
-    $scPolicies = Get-MgPaged -RelativeUri "deviceManagement/configurationPolicies"
-    foreach ($p in $scPolicies | Where-Object { $_.platforms -contains "windows10" -or $_.platforms -contains "windows10X" }) {
-        Write-Host "Exporting Settings Catalog: $($p.displayName)"
-        $settings  = Get-MgPaged -RelativeUri "deviceManagement/configurationPolicies/$($p.id)/settings?`$expand=settingDefinitions"
-        $exportObj = [PSCustomObject]@{
-            id           = $p.id
-            displayName  = $p.displayName
-            description  = $p.description
-            platforms    = $p.platforms
-            technologies = $p.technologies
-            settings     = $settings
-        }
+$ExportPath = "C:\IntuneOutput"
 
-        $fileName = "{0}_{1}.json" -f (SafeName $p.displayName), $p.id
-        $file     = Join-Path $ExportRoot "SettingsCatalog" $fileName
+####################################################
 
-        ExportJson -Object $exportObj -Path $file
-    }
-}
-#endregion
+$Policies = Get-SettingsCatalogPolicy
 
-#region Export: Device Configurations
-SafeInvoke {
-    $deviceConfigs = Get-MgPaged -RelativeUri "deviceManagement/deviceConfigurations"
-    foreach ($cfg in $deviceConfigs | Where-Object { $_.platform -match "windows" }) {
-        Write-Host "Exporting Device Configuration: $($cfg.displayName)"
-        $detail = Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/deviceManagement/deviceConfigurations/$($cfg.id)" -Debug
+if($Policies){
 
-        $fileName = "{0}_{1}.json" -f (SafeName $cfg.displayName), $cfg.id
-        $file     = Join-Path $ExportRoot "DeviceConfigurations" $fileName
+    foreach($policy in $Policies){
 
-        ExportJson -Object $detail -Path $file
-    }
-}
-#endregion
+        Write-Host $policy.name -ForegroundColor Yellow
 
-#region Export: Administrative Templates (GPO)
-SafeInvoke {
-    $gpoConfigs = Get-MgPaged -RelativeUri "deviceManagement/groupPolicyConfigurations"
-    foreach ($gpo in $gpoConfigs | Where-Object { $_.platforms -contains "windows10" }) {
-        Write-Host "Exporting Admin Template: $($gpo.displayName)"
-        $defs      = Get-MgPaged -RelativeUri "deviceManagement/groupPolicyConfigurations/$($gpo.id)/definitionValues?`$expand=definition"
-        $exportObj = [PSCustomObject]@{
-            id               = $gpo.id
-            displayName      = $gpo.displayName
-            description      = $gpo.description
-            definitionValues = $defs
+        $AllSettingsInstances = @()
+
+        $policyid = $policy.id
+        $Policy_Technologies = $policy.technologies
+        $Policy_Platforms = $Policy.platforms
+        $Policy_Name = $Policy.name
+        $Policy_Description = $policy.description
+
+        $PolicyBody = New-Object -TypeName PSObject
+
+        Add-Member -InputObject $PolicyBody -MemberType 'NoteProperty' -Name 'name' -Value "$Policy_Name"
+        Add-Member -InputObject $PolicyBody -MemberType 'NoteProperty' -Name 'description' -Value "$Policy_Description"
+        Add-Member -InputObject $PolicyBody -MemberType 'NoteProperty' -Name 'platforms' -Value "$Policy_Platforms"
+        Add-Member -InputObject $PolicyBody -MemberType 'NoteProperty' -Name 'technologies' -Value "$Policy_Technologies"
+        Add-Member -InputObject $PolicyBody -MemberType 'NoteProperty' -Name 'roleScopeTagIds' -Value @("0")
+        Add-Member -InputObject $PolicyBody -MemberType 'NoteProperty' -Name 'priority' -Value 1
+        Add-Member -InputObject $PolicyBody -MemberType 'NoteProperty' -Name 'version' -Value 1
+
+
+        # Checking if policy has a templateId associated
+        if($policy.templateReference.templateId){
+
+            Write-Host "Found template reference" -f Cyan
+            $templateId = $policy.templateReference.templateId
+
+            $PolicyTemplateReference = New-Object -TypeName PSObject
+
+            Add-Member -InputObject $PolicyTemplateReference -MemberType 'NoteProperty' -Name 'templateId' -Value $templateId
+
+            Add-Member -InputObject $PolicyBody -MemberType 'NoteProperty' -Name 'templateReference' -Value $PolicyTemplateReference
+
         }
 
-        $fileName = "{0}_{1}.json" -f (SafeName $gpo.displayName), $gpo.id
-        $file     = Join-Path $ExportRoot "AdminTemplates" $fileName
+        $SettingInstances = Get-SettingsCatalogPolicySettings -policyid $policyid
 
-        ExportJson -Object $exportObj -Path $file
+        $Instances = $SettingInstances.settingInstance
+
+        foreach($object in $Instances){
+
+            $Instance = New-Object -TypeName PSObject
+
+            Add-Member -InputObject $Instance -MemberType 'NoteProperty' -Name 'settingInstance' -Value $object
+            $AllSettingsInstances += $Instance
+
+        }
+
+        Add-Member -InputObject $PolicyBody -MemberType 'NoteProperty' -Name 'settings' -Value @($AllSettingsInstances)
+
+        Export-JSONData -JSON $PolicyBody -ExportPath "$ExportPath"
+        Write-Host
+
     }
+
 }
-#endregion
 
-#region Export: Device Compliance Policies
-SafeInvoke {
-    $compPolicies = Get-MgPaged -RelativeUri "deviceManagement/deviceCompliancePolicies"
-    foreach ($cp in $compPolicies | Where-Object { $_.platform -match "windows" }) {
-        Write-Host "Exporting Compliance Policy: $($cp.displayName)"
-        $detail = Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/deviceManagement/deviceCompliancePolicies/$($cp.id)" -Debug
+else {
 
-        $fileName = "{0}_{1}.json" -f (SafeName $cp.displayName), $cp.id
-        $file     = Join-Path $ExportRoot "Compliance" $fileName
+    Write-Host "No Settings Catalog policies found..." -ForegroundColor Red
+    Write-Host
 
-        ExportJson -Object $detail -Path $file
-    }
 }
-#endregion
-
-Write-Host "`nExport complete. JSON files are located under $ExportRoot" -ForegroundColor Green
