@@ -23,14 +23,11 @@ Import-Module Microsoft.Graph.DeviceManagement.DeviceCompliancePolicies -ErrorAc
 Import-Module Microsoft.Graph.Authentication -ErrorAction Stop
 #endregion
 
-#region Inline Credentials
-$TenantId     = "YOUR_TENANT_ID"       # e.g., "abcd1234-...."
-$ClientId     = "YOUR_CLIENT_ID"       # from your App registration
-$ClientSecret = "YOUR_CLIENT_SECRET"   # secure storage recommended
-#endregion
-
 #region Configuration
-$ExportRoot = "C:\IntuneExports"       # adjust as needed
+$TenantId     = "YOUR_TENANT_ID"           # e.g., "abcd1234-...."
+$ClientId     = "YOUR_CLIENT_ID"           # from your App registration
+$ClientSecret = "YOUR_CLIENT_SECRET"       # secure storage recommended
+$ExportRoot   = "C:\IntuneExports"         # adjust as needed
 #endregion
 
 #region Authentication
@@ -67,7 +64,9 @@ function ExportJson {
 }
 
 function Get-MgPaged {
-    param([Parameter(Mandatory)][string]$RelativeUri)
+    param(
+        [Parameter(Mandatory)][string]$RelativeUri
+    )
     $baseUrl = "https://graph.microsoft.com/v1.0/"
     $items   = @()
     $next    = $RelativeUri
@@ -117,7 +116,7 @@ SafeInvoke {
     $scPolicies = Get-MgPaged -RelativeUri "deviceManagement/configurationPolicies"
     foreach ($p in $scPolicies | Where-Object { $_.platforms -contains "windows10" -or $_.platforms -contains "windows10X" }) {
         Write-Host "Exporting Settings Catalog: $($p.displayName)"
-        $settings  = Get-MgPaged -RelativeUri "deviceManagement/configurationPolicies/$($p.id)/settings?`$expand=settingDefinitions"
+        $settings = Get-MgPaged -RelativeUri "deviceManagement/configurationPolicies/$($p.id)/settings?`$expand=settingDefinitions"
         $exportObj = [PSCustomObject]@{
             id           = $p.id
             displayName  = $p.displayName
@@ -149,7 +148,7 @@ SafeInvoke {
     $gpoConfigs = Get-MgPaged -RelativeUri "deviceManagement/groupPolicyConfigurations"
     foreach ($gpo in $gpoConfigs | Where-Object { $_.platforms -contains "windows10" }) {
         Write-Host "Exporting Admin Template: $($gpo.displayName)"
-        $defs      = Get-MgPaged -RelativeUri "deviceManagement/groupPolicyConfigurations/$($gpo.id)/definitionValues?`$expand=definition"
+        $defs = Get-MgPaged -RelativeUri "deviceManagement/groupPolicyConfigurations/$($gpo.id)/definitionValues?`$expand=definition"
         $exportObj = [PSCustomObject]@{
             id               = $gpo.id
             displayName      = $gpo.displayName
