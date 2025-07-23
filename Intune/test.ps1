@@ -15,7 +15,7 @@ $ErrorActionPreference = 'Stop'
 $DebugPreference       = 'Continue'
 $VerbosePreference     = 'Continue'
 
-# Ensure Microsoft Graph modules are available
+# Import required Microsoft Graph modules
 Import-Module Microsoft.Graph.DeviceManagement.Configuration -ErrorAction Stop
 Import-Module Microsoft.Graph.DeviceManagement.DeviceConfigurations -ErrorAction Stop
 Import-Module Microsoft.Graph.DeviceManagement.GroupPolicyConfigurations -ErrorAction Stop
@@ -24,25 +24,26 @@ Import-Module Microsoft.Graph.Authentication -ErrorAction Stop
 #endregion
 
 #region Load Credentials from XML
-# The XML file contains TenantId, ClientId as plain text, and ClientSecret as a SecureString via DPAPI.
-$credPath = 'C:\prasad\scripts\GraphCreds.xml'
+# XML structure example:
+# <Credentials>
+#   <TenantId>abcd1234-....</TenantId>
+#   <ClientId>yyyy5678-....</ClientId>
+#   <ClientSecret>YOUR_CLIENT_SECRET</ClientSecret>
+# </Credentials>
+
+$xmlPath = 'C:\prasad\scripts\GraphCreds.xml'
 try {
-    $credData = Import-Clixml -Path $credPath
+    [xml]$credData = Get-Content -Path $xmlPath -ErrorAction Stop
 } catch {
-    Throw "Failed to import credentials from $credPath: $_"
+    Throw "Failed to read credentials XML at $xmlPath: $_"
 }
-
-$TenantId     = $credData.TenantId
-$ClientId     = $credData.ClientId
-
-# SecureString to plain text for ClientSecret (in-memory only)
-$ClientSecret = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto(
-    [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($credData.ClientSecret)
-)
+$TenantId     = $credData.Credentials.TenantId
+$ClientId     = $credData.Credentials.ClientId
+$ClientSecret = $credData.Credentials.ClientSecret
 #endregion
 
 #region Configuration
-$ExportRoot = "C:\IntuneExports"         # adjust as needed
+$ExportRoot = "C:\IntuneExports"  # adjust as needed
 #endregion
 
 #region Authentication
@@ -79,9 +80,7 @@ function ExportJson {
 }
 
 function Get-MgPaged {
-    param(
-        [Parameter(Mandatory)][string]$RelativeUri
-    )
+    param([Parameter(Mandatory)][string]$RelativeUri)
     $baseUrl = "https://graph.microsoft.com/v1.0/"
     $items   = @()
     $next    = $RelativeUri
