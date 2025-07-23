@@ -23,20 +23,37 @@ $ExportRoot   = 'C:\IntuneExports'     # adjust path if desired
 
 #region ----------------------- MODULE + LOGIN -------------------------------
 
-# Install (first run) then import latest SDKs
-$required = 'Microsoft.Graph','Microsoft.Graph.Beta'
-foreach ($m in $required) {
-    if (-not (Get-Module -ListAvailable -Name $m)) {
-        Install-Module $m -Scope CurrentUser -Force
+# Check and install Microsoft Graph modules if not present
+$requiredModules = @('Microsoft.Graph', 'Microsoft.Graph.Beta')
+
+foreach ($module in $requiredModules) {
+    if (-not (Get-Module -ListAvailable -Name $module)) {
+        Write-Host "Installing module: $module" -ForegroundColor Yellow
+        Install-Module $module -Scope CurrentUser -Force -AllowClobber
     }
-    Import-Module $m
+    
+    # Import the module
+    Write-Host "Importing module: $module" -ForegroundColor Green
+    Import-Module $module -Force
 }
 
-# Build PSCredential for ClientSecretCredential auth
-$secureSecret = ConvertTo-SecureString $ClientSecret -AsPlainText -Force
-$AppCred      = [pscredential]::new($ClientId,$secureSecret)
+# Verify Connect-MgGraph is available
+if (-not (Get-Command Connect-MgGraph -ErrorAction SilentlyContinue)) {
+    throw "Connect-MgGraph cmdlet not found. Please ensure Microsoft.Graph.Authentication module is properly installed."
+}
 
-# Connect using app-only
+#endregion
+
+# Your existing authentication variables
+$TenantId = 'YOUR_TENANT_ID'
+$ClientId = 'YOUR_CLIENT_ID'
+$ClientSecret = 'YOUR_CLIENT_SECRET'
+
+# Create secure credentials
+$secureSecret = ConvertTo-SecureString $ClientSecret -AsPlainText -Force
+$AppCred = [pscredential]::new($ClientId, $secureSecret)
+
+# Connect to Microsoft Graph
 Connect-MgGraph -TenantId $TenantId -ClientSecretCredential $AppCred
 
 #endregion -------------------------------------------------------------------
