@@ -1,68 +1,69 @@
 <#
 .SYNOPSIS
-    Export ALL Windows Intune profiles to JSON, with correct file names.
+    Export all Windows Intune configuration & compliance profiles to JSON.
+
 .DESCRIPTION
-    • App-only auth: Connect-MgGraph -ClientSecretCredential
-    • Full pagination: @odata.nextLink loops
-    • File names use exact Intune DisplayName (sanitized)
-    • Profile types: Settings Catalog, Device Configurations, Admin Templates, Device Compliance
+    • Uses Microsoft.Graph PowerShell SDK v2 (app-only, no interactive login).
+    • Queries four endpoints for complete coverage.
+    • Handles @odata.nextLink pagination.
+    • Names each .json file exactly as the Intune DisplayName (sanitized).
+    • Requires Application permission DeviceManagementConfiguration.Read.All.
 #>
 
-#region Config
-$TenantId     = "YOUR_TENANT_ID"
-$ClientId     = "YOUR_CLIENT_ID"
-$ClientSecret = "YOUR_CLIENT_SECRET"   # secure in Key Vault
-$ExportRoot   = "C:\IntuneExports"
+#region Configuration
+$TenantId     = "YOUR_TENANT_ID"         # e.g., "abcd1234-...."
+$ClientId     = "YOUR_CLIENT_ID"         # from your App registration
+$ClientSecret = "YOUR_CLIENT_SECRET"     # secure storage recommended
+$ExportRoot   = "C:\IntuneExports"       # adjust as needed
 #endregion
 
-#region Modules & Auth
-# Ensure modules
-foreach ($mod in "Microsoft.Graph","Microsoft.Graph.Beta") {
-    if (-not (Get-Module -ListAvailable -Name $mod)) {
-        Install-Module $mod -Scope CurrentUser -Force -AllowClobber
-    }
-    Import-Module $mod -Force
-}
-
-# Build PSCredential for app-only auth
+#region Authentication
+# Assumes Microsoft.Graph and Microsoft.Graph.Beta modules are already installed.
 $secureSecret = ConvertTo-SecureString $ClientSecret -AsPlainText -Force
 $appCred      = [pscredential]::new($ClientId, $secureSecret)
-
-# Connect to Graph
 Connect-MgGraph -TenantId $TenantId -ClientSecretCredential $appCred
 #endregion
 
-#region Helpers
+#region Helper Functions
 function Get-MgPaged {
-    param([string]$Uri,[switch]$Beta)
-    $base = $Beta ? "https://graph.microsoft.com/beta/" : "https://graph.microsoft.com/v1.0/"
-    $items = @(); $next = $Uri
+    param(
+        [Parameter(Mandatory)][string]$RelativeUri
+    )
+    $baseUrl = "https://graph.microsoft.com/beta/"
+    $items   = @()
+    $next    = $RelativeUri
     do {
-        $resp = Invoke-MgGraphRequest -Method GET -Uri ($base + $next)
-        $items += $resp.value
-        $next = $resp.'@odata.nextLink' -replace "^https://graph.microsoft.com/(beta|v1\.0)/",""
+        $response = Invoke-MgGraphRequest -Method GET -Uri ($baseUrl + $next)
+        $items   += $response.value
+        $next     = $response.'@odata.nextLink' -replace '^https://graph.microsoft.com/beta/',''
     } while ($next)
     return $items
 }
 
 function SafeName {
-    param([string]$n)
-    return ($n -replace '[\\\/:*?"<>|]','_')
+    param([string]$Name)
+    return ($Name -replace '[\\\/:*?"<>|]','_')
 }
 
 function ExportJson {
-    param($obj,[string]$path)
-    $dir = Split-Path $path
-    if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
-    $obj | ConvertTo-Json -Depth 20 | Out-File -FilePath $path -Encoding utf8
+    param(
+        [Parameter(Mandatory)][object]$Object,
+        [Parameter(Mandatory)][string]$Path
+    )
+    $folder = Split-Path $Path
+    if (-not (Test-Path $folder)) {
+        New-Item -ItemType Directory -Path $folder -Force | Out-Null
+    }
+    $Object | ConvertTo-Json -Depth 20 | Out-File -FilePath $Path -Encoding utf8
 }
 #endregion
 
-#region Export Settings Catalog
-$sc = Get-MgPaged -Uri "deviceManagement/configurationPolicies" -Beta
-foreach ($p in $sc | Where { $_.platforms -contains "windows10" -or $_.platforms -contains "windows10X" }) {
-    $settings = Get-MgPaged -Uri "deviceManagement/configurationPolicies/$($p.id)/settings?`$expand=settingDefinitions" -Beta
-    $exportObj = [pscustomobject]@{
+#region Export: Settings Catalog
+$scPolicies = Get-MgPaged -RelativeUri "deviceManagement/configurationPolicies"
+foreach ($p in $scPolicies | Where-Object { $_.platforms -contains "windows10" -or $_.platforms -contains "windows10X" }) {
+    Write-Host "Exporting Settings Catalog: $($p.displayName)"
+    $settings = Get-MgPaged -RelativeUri "deviceManagement/configurationPolicies/$($p.id)/settings?`$expand=settingDefinitions"
+    $exportObj = [PSCustomObject]@{
         id           = $p.id
         name         = $p.displayName
         description  = $p.description
@@ -71,41 +72,44 @@ foreach ($p in $sc | Where { $_.platforms -contains "windows10" -or $_.platforms
         settings     = $settings
     }
     $file = Join-Path $ExportRoot "SettingsCatalog\$((SafeName $p.displayName)).json"
-    ExportJson -obj $exportObj -path $file
+    ExportJson -Object $exportObj -Path $file
 }
 #endregion
 
-#region Export Device Configurations
-$dc = Get-MgPaged -Uri "deviceManagement/deviceConfigurations" -Beta
-foreach ($c in $dc | Where { $_.platform -match "windows" }) {
-    $detail = Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/beta/deviceManagement/deviceConfigurations/$($c.id)"
-    $file   = Join-Path $ExportRoot "DeviceConfigurations\$((SafeName $c.displayName)).json"
-    ExportJson -obj $detail -path $file
+#region Export: Device Configurations
+$deviceConfigs = Get-MgPaged -RelativeUri "deviceManagement/deviceConfigurations"
+foreach ($cfg in $deviceConfigs | Where-Object { $_.platform -match "windows" }) {
+    Write-Host "Exporting Device Configuration: $($cfg.displayName)"
+    $detail = Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/beta/deviceManagement/deviceConfigurations/$($cfg.id)"
+    $file   = Join-Path $ExportRoot "DeviceConfigurations\$((SafeName $cfg.displayName)).json"
+    ExportJson -Object $detail -Path $file
 }
 #endregion
 
-#region Export Admin Templates
-$gp = Get-MgPaged -Uri "deviceManagement/groupPolicyConfigurations" -Beta
-foreach ($g in $gp | Where { $_.platforms -contains "windows10" }) {
-    $defs = Get-MgPaged -Uri "deviceManagement/groupPolicyConfigurations/$($g.id)/definitionValues?`$expand=definition" -Beta
-    $exportObj = [pscustomobject]@{
-        id               = $g.id
-        name             = $g.displayName
-        description      = $g.description
+#region Export: Administrative Templates (GPO)
+$gpoConfigs = Get-MgPaged -RelativeUri "deviceManagement/groupPolicyConfigurations"
+foreach ($gpo in $gpoConfigs | Where-Object { $_.platforms -contains "windows10" }) {
+    Write-Host "Exporting Admin Template: $($gpo.displayName)"
+    $defs = Get-MgPaged -RelativeUri "deviceManagement/groupPolicyConfigurations/$($gpo.id)/definitionValues?`$expand=definition"
+    $exportObj = [PSCustomObject]@{
+        id               = $gpo.id
+        name             = $gpo.displayName
+        description      = $gpo.description
         definitionValues = $defs
     }
-    $file = Join-Path $ExportRoot "AdminTemplates\$((SafeName $g.displayName)).json"
-    ExportJson -obj $exportObj -path $file
+    $file = Join-Path $ExportRoot "AdminTemplates\$((SafeName $gpo.displayName)).json"
+    ExportJson -Object $exportObj -Path $file
 }
 #endregion
 
-#region Export Device Compliance
-$cp = Get-MgPaged -Uri "deviceManagement/deviceCompliancePolicies" -Beta
-foreach ($p in $cp | Where { $_.platform -match "windows" }) {
-    $detail = Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/beta/deviceManagement/deviceCompliancePolicies/$($p.id)"
-    $file   = Join-Path $ExportRoot "Compliance\$((SafeName $p.displayName)).json"
-    ExportJson -obj $detail -path $file
+#region Export: Device Compliance
+$compPolicies = Get-MgPaged -RelativeUri "deviceManagement/deviceCompliancePolicies"
+foreach ($cp in $compPolicies | Where-Object { $_.platform -match "windows" }) {
+    Write-Host "Exporting Compliance Policy: $($cp.displayName)"
+    $detail = Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/beta/deviceManagement/deviceCompliancePolicies/$($cp.id)"
+    $file   = Join-Path $ExportRoot "Compliance\$((SafeName $cp.displayName)).json"
+    ExportJson -Object $detail -Path $file
 }
 #endregion
 
-Write-Host "Export complete. Files in '$ExportRoot'" -ForegroundColor Green
+Write-Host "`nExport complete. JSON files are located under $ExportRoot" -ForegroundColor Green
