@@ -1,64 +1,89 @@
-# Install dependent modules if missing
-if (-not (Get-Module -ListAvailable -Name MSAL.PS)) {
-    Install-Module -Name MSAL.PS -Scope CurrentUser -Force -AllowClobber
+# Install Microsoft.Graph module if missing
+if (-not (Get-Module -ListAvailable -Name Microsoft.Graph)) {
+    Install-Module Microsoft.Graph -Scope CurrentUser -Force
 }
 
-# ==== CONFIG VARIABLES ====
-$clientId = "<YOUR-ENRA-APP-CLIENT-ID>"
-$tenantId = "<YOUR-TENANT-ID>"
-$authority = "https://login.microsoftonline.com/$tenantId"
-$scopes = "https://graph.microsoft.com/.default"
+Import-Module Microsoft.Graph
+
+# ==== CONFIG ====
+$tenantId = "<YOUR_TENANT_ID>"
+$clientId = "<YOUR_CLIENT_ID>"
+$clientSecret = "<YOUR_CLIENT_SECRET>"
 $exportPath = "C:\IntuneExports"
 
-if (!(Test-Path $exportPath)) {
+if (-not (Test-Path $exportPath)) {
     New-Item -ItemType Directory -Path $exportPath | Out-Null
 }
 
-# ==== AUTHENTICATION ====
-$authResult = Get-MsalToken -ClientId $clientId -TenantId $tenantId -Authority $authority -Scopes $scopes -Interactive
-$authHeader = @{
-    "Authorization" = "Bearer $($authResult.AccessToken)"
-    "Content-Type"  = "application/json"
-}
+# ==== CONNECT TO GRAPH USING CLIENT CREDENTIALS ====
+$scopes = @("https://graph.microsoft.com/.default")
+
+# Connect to MS Graph with app-only
+Connect-MgGraph -ClientId $clientId -TenantId $tenantId -ClientSecret $clientSecret -Scopes $scopes
+
+# Set API version for Intune
+Select-MgProfile -Name "beta"
+
 
 # ==== FUNCTIONS ====
+
 function Get-AllSettingsCatalogPolicies {
-    $uri = "https://graph.microsoft.com/beta/deviceManagement/configurationPolicies?`$filter=technologies has 'mdm'"
-    $allPolicies = @()
+    $policies = @()
+    $uri = "deviceManagement/configurationPolicies?`$filter=technologies%20ne%20null" # you can tighten filter if needed
     do {
-        $response = Invoke-RestMethod -Uri $uri -Headers $authHeader -Method Get
-        $allPolicies += $response.value
-        $uri = if ($response.'@odata.nextLink') { $response.'@odata.nextLink' } else { $null }
+        $page = Invoke-MgGraphRequest -Method GET -Uri $uri
+        $policies += $page.value
+        $uri = $page.'@odata.nextLink'
+        if ($uri) {
+            # Strip root URL, only relative path from nextLink, because Invoke-MgGraphRequest needs relative
+            $uri = $uri -replace "https://graph.microsoft.com/beta/", ""
+        }
     } while ($uri)
-    return $allPolicies
+
+    # Filter to only Settings Catalog policies with technology 'mdm' explicitly if needed
+    return $policies | Where-Object { $_.technologies -contains 'mdm' }
 }
 
 function Get-PolicySettings {
     param([string]$policyId)
-    $uri = "https://graph.microsoft.com/beta/deviceManagement/configurationPolicies('$policyId')/settings?`$expand=settingDefinitions"
-    $allSettings = @()
+    $settings = @()
+    $uri = "deviceManagement/configurationPolicies/$policyId/settings?`$expand=settingDefinitions"
     do {
-        $response = Invoke-RestMethod -Uri $uri -Headers $authHeader -Method Get
-        $allSettings += $response.value
-        $uri = if ($response.'@odata.nextLink') { $response.'@odata.nextLink' } else { $null }
+        $page = Invoke-MgGraphRequest -Method GET -Uri $uri
+        $settings += $page.value
+        $uri = $page.'@odata.nextLink'
+        if ($uri) {
+            $uri = $uri -replace "https://graph.microsoft.com/beta/", ""
+        }
     } while ($uri)
-    return $allSettings
+    return $settings
 }
 
-# ==== MAIN EXPORT LOOP ====
+# ==== EXPORT ALL POLICIES ====
+
 $policies = Get-AllSettingsCatalogPolicies
+
 foreach ($policy in $policies) {
+
     $settings = Get-PolicySettings -policyId $policy.id
-    $output = @{
+
+    $exportObject = [PSCustomObject]@{
+        id           = $policy.id
         name         = $policy.displayName
         description  = $policy.description
-        id           = $policy.id
         platforms    = $policy.platforms
         technologies = $policy.technologies
         settings     = $settings
     }
+
     $safeName = ($policy.displayName -replace '[\\\/:*?"<>|]', '_')
-    $fileName = "$exportPath\$safeName" + "_" + (Get-Date -Format 'yyyyMMddHHmmss') + ".json"
-    $output | ConvertTo-Json -Depth 10 | Set-Content -Path $fileName -Encoding utf8
-    Write-Host "Exported: $fileName"
+
+    $filePath = Join-Path $exportPath "$safeName" + "_" + (Get-Date -Format "yyyyMMddHHmmss") + ".json"
+
+    $exportObject | ConvertTo-Json -Depth 15 | Out-File -FilePath $filePath -Encoding utf8
+
+    Write-Host "Exported policy '$($policy.displayName)' to $filePath"
 }
+
+# Disconnect from Graph session after completing export
+Disconnect-MgGraph
