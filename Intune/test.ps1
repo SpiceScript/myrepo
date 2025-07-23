@@ -15,7 +15,7 @@ $ErrorActionPreference = 'Stop'
 $DebugPreference       = 'Continue'
 $VerbosePreference     = 'Continue'
 
-# Import required Microsoft Graph modules
+# Ensure Microsoft Graph modules are available
 Import-Module Microsoft.Graph.DeviceManagement.Configuration -ErrorAction Stop
 Import-Module Microsoft.Graph.DeviceManagement.DeviceConfigurations -ErrorAction Stop
 Import-Module Microsoft.Graph.DeviceManagement.GroupPolicyConfigurations -ErrorAction Stop
@@ -23,27 +23,14 @@ Import-Module Microsoft.Graph.DeviceManagement.DeviceCompliancePolicies -ErrorAc
 Import-Module Microsoft.Graph.Authentication -ErrorAction Stop
 #endregion
 
-#region Load Credentials from XML
-# XML structure example:
-# <Credentials>
-#   <TenantId>abcd1234-....</TenantId>
-#   <ClientId>yyyy5678-....</ClientId>
-#   <ClientSecret>YOUR_CLIENT_SECRET</ClientSecret>
-# </Credentials>
-
-$xmlPath = 'C:\prasad\scripts\GraphCreds.xml'
-try {
-    [xml]$credData = Get-Content -Path $xmlPath -ErrorAction Stop
-} catch {
-    Throw "Failed to read credentials XML at $xmlPath: $_"
-}
-$TenantId     = $credData.Credentials.TenantId
-$ClientId     = $credData.Credentials.ClientId
-$ClientSecret = $credData.Credentials.ClientSecret
+#region Inline Credentials
+$TenantId     = "YOUR_TENANT_ID"       # e.g., "abcd1234-...."
+$ClientId     = "YOUR_CLIENT_ID"       # from your App registration
+$ClientSecret = "YOUR_CLIENT_SECRET"   # secure storage recommended
 #endregion
 
 #region Configuration
-$ExportRoot = "C:\IntuneExports"  # adjust as needed
+$ExportRoot = "C:\IntuneExports"       # adjust as needed
 #endregion
 
 #region Authentication
@@ -130,7 +117,7 @@ SafeInvoke {
     $scPolicies = Get-MgPaged -RelativeUri "deviceManagement/configurationPolicies"
     foreach ($p in $scPolicies | Where-Object { $_.platforms -contains "windows10" -or $_.platforms -contains "windows10X" }) {
         Write-Host "Exporting Settings Catalog: $($p.displayName)"
-        $settings = Get-MgPaged -RelativeUri "deviceManagement/configurationPolicies/$($p.id)/settings?`$expand=settingDefinitions"
+        $settings  = Get-MgPaged -RelativeUri "deviceManagement/configurationPolicies/$($p.id)/settings?`$expand=settingDefinitions"
         $exportObj = [PSCustomObject]@{
             id           = $p.id
             displayName  = $p.displayName
@@ -162,7 +149,7 @@ SafeInvoke {
     $gpoConfigs = Get-MgPaged -RelativeUri "deviceManagement/groupPolicyConfigurations"
     foreach ($gpo in $gpoConfigs | Where-Object { $_.platforms -contains "windows10" }) {
         Write-Host "Exporting Admin Template: $($gpo.displayName)"
-        $defs = Get-MgPaged -RelativeUri "deviceManagement/groupPolicyConfigurations/$($gpo.id)/definitionValues?`$expand=definition"
+        $defs      = Get-MgPaged -RelativeUri "deviceManagement/groupPolicyConfigurations/$($gpo.id)/definitionValues?`$expand=definition"
         $exportObj = [PSCustomObject]@{
             id               = $gpo.id
             displayName      = $gpo.displayName
