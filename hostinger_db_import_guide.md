@@ -27,6 +27,7 @@ Example:
 ```powershell
 ssh -p 65002 username@yourdomain.com
 ```
+<img width="555" height="245" alt="image" src="https://github.com/user-attachments/assets/b72ce85f-5bf0-45d3-ba25-320a818f840a" />
 
 Exit back to PowerShell at any time:
 ```bash
