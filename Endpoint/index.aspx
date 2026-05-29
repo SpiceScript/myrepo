@@ -1748,10 +1748,17 @@
         function fetchRoadmapData() {
             return new Promise((resolve) => {
                 // A. Check if running inside Microsoft Power Pages with Liquid data bridge active
-                if (window.POWER_PAGES_LIVE_DATA && window.POWER_PAGES_LIVE_DATA.length > 0) {
-                    console.log("Running in POWER PAGES MODE. Live SharePoint data loaded successfully via Liquid bridge.");
-                    resolve(window.POWER_PAGES_LIVE_DATA);
-                    return;
+                if (typeof window.POWER_PAGES_LIVE_DATA !== 'undefined') {
+                    console.log("POWER_PAGES_LIVE_DATA detected on window object. Record count:", window.POWER_PAGES_LIVE_DATA.length);
+                    if (window.POWER_PAGES_LIVE_DATA.length > 0) {
+                        console.log("Running in POWER PAGES MODE. Live SharePoint data loaded successfully via Liquid bridge.");
+                        resolve(window.POWER_PAGES_LIVE_DATA);
+                        return;
+                    } else {
+                        console.warn("WARNING: POWER_PAGES_LIVE_DATA array is empty! Power Pages fetched 0 records from Dataverse. Please check your Table Permissions (Global Read) or Entity Name.");
+                    }
+                } else {
+                    console.log("window.POWER_PAGES_LIVE_DATA is undefined. Liquid block is not running or not pasted at the top of the HTML page.");
                 }
 
                 // B. Check if running inside SharePoint Online

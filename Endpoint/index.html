@@ -8,19 +8,19 @@
 <!-- 
 {% fetchxml roadmapQuery %}
 <fetch>
-  <entity name="workspaceservicesroadmap">
-    <attribute name="title" />
-    <attribute name="description" />
-    <attribute name="servicearea" />
-    <attribute name="objective" />
-    <attribute name="buinitiative" />
-    <attribute name="progress" />
-    <attribute name="status" />
-    <attribute name="startdate" />
-    <attribute name="enddate" />
-    <attribute name="subcategory" />
-    <attribute name="roadmapid" />
-    <attribute name="jiralink" />
+  <entity name="crcce_workspaceservicesroadmap">
+    <attribute name="crcce_title" />
+    <attribute name="crcce_description" />
+    <attribute name="crcce_servicearea" />
+    <attribute name="crcce_objective" />
+    <attribute name="crcce_buinitiative" />
+    <attribute name="crcce_progress" />
+    <attribute name="crcce_status" />
+    <attribute name="crcce_startdate" />
+    <attribute name="crcce_enddate" />
+    <attribute name="crcce_subcategory" />
+    <attribute name="crcce_roadmapid" />
+    <attribute name="crcce_jiralink" />
   </entity>
 </fetch>
 {% endfetchxml %}
@@ -30,19 +30,19 @@
     {% for item in roadmapQuery.results.entities %}
     {
       Id: {{ forloop.index }},
-      RoadmapID: "{{ item.roadmapid }}",
-      Title: "{{ item.title }}",
-      Description: "{{ item.description }}",
-      ServiceArea: "{{ item.servicearea }}",
-      Objective: "{{ item.objective }}",
-      BUInitiative: "{{ item.buinitiative }}",
-      Progress: {{ item.progress | default: 0.0 }},
-      Status: "{{ item.status }}",
-      StartDate: "{{ item.startdate | date: 'yyyy-MM-dd' }}",
-      EndDate: "{{ item.enddate | date: 'yyyy-MM-dd' }}",
-      SubCategory: "{{ item.subcategory }}",
+      RoadmapID: "{{ item.crcce_roadmapid }}",
+      Title: "{{ item.crcce_title }}",
+      Description: "{{ item.crcce_description }}",
+      ServiceArea: "{{ item.crcce_servicearea }}",
+      Objective: "{{ item.crcce_objective }}",
+      BUInitiative: "{{ item.crcce_buinitiative }}",
+      Progress: {{ item.crcce_progress | default: 0.0 }},
+      Status: "{{ item.crcce_status }}",
+      StartDate: "{{ item.crcce_startdate | date: 'yyyy-MM-dd' }}",
+      EndDate: "{{ item.crcce_enddate | date: 'yyyy-MM-dd' }}",
+      SubCategory: "{{ item.crcce_subcategory }}",
       IsMilestone: false,
-      JiraLink: "{{ item.jiralink }}",
+      JiraLink: "{{ item.crcce_jiralink }}",
       VersionHistory: []
     }{% unless forloop.last %},{% endunless %}
     {% endfor %}
