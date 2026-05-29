@@ -415,64 +415,86 @@
             gap: 0.6rem;
         }
 
-        .checkbox-container {
-            display: flex;
-            align-items: flex-start;
-            gap: 0.6rem;
-            font-size: 0.875rem;
-            color: var(--text-primary);
-            cursor: pointer;
-            user-select: none;
+        /* Checkbox Style customization (Namespaced to avoid Bootstrap/Power Pages collisions) */
+        .roadmap-checkbox-container {
+            display: flex !important;
+            flex-direction: row !important;
+            align-items: flex-start !important;
+            justify-content: flex-start !important;
+            gap: 0.6rem !important;
+            font-size: 0.875rem !important;
+            color: var(--text-primary) !important;
+            cursor: pointer !important;
+            user-select: none !important;
+            position: relative !important;
+            margin: 0.5rem 0 !important;
+            padding: 0 !important;
+            float: none !important;
+            height: auto !important;
+            width: 100% !important;
+            text-align: left !important;
         }
 
-        .checkbox-container input {
-            opacity: 0;
-            position: absolute;
-            width: 0;
-            height: 0;
+        .roadmap-checkbox-container input[type="checkbox"] {
+            all: unset !important;
+            opacity: 0 !important;
+            position: absolute !important;
+            width: 0 !important;
+            height: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            border: none !important;
         }
 
-        .checkbox-box {
-            width: 18px;
-            height: 18px;
-            border: 1.5px solid var(--text-tertiary);
-            border-radius: 4px;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            background-color: var(--bg-secondary);
-            flex-shrink: 0;
-            margin-top: 2px;
-            transition: var(--transition-smooth);
+        .roadmap-checkbox-box {
+            display: inline-flex !important;
+            justify-content: center !important;
+            align-items: center !important;
+            width: 18px !important;
+            height: 18px !important;
+            border: 1.5px solid var(--text-tertiary) !important;
+            border-radius: 4px !important;
+            background-color: var(--bg-secondary) !important;
+            flex-shrink: 0 !important;
+            margin-top: 2px !important;
+            margin-right: 8px !important;
+            transition: var(--transition-smooth) !important;
+            position: relative !important;
         }
 
-        .checkbox-container input:checked ~ .checkbox-box {
-            background-color: var(--primary);
-            border-color: var(--primary);
+        .roadmap-checkbox-container input[type="checkbox"]:checked ~ .roadmap-checkbox-box {
+            background-color: var(--primary) !important;
+            border-color: var(--primary) !important;
         }
 
-        .checkbox-box::after {
-            content: '';
-            display: none;
-            width: 5px;
-            height: 10px;
-            border: solid #FFFFFF;
-            border-width: 0 2px 2px 0;
-            transform: rotate(45deg);
-            margin-bottom: 2px;
+        .roadmap-checkbox-box::after {
+            content: '' !important;
+            display: none !important;
+            width: 5px !important;
+            height: 10px !important;
+            border: solid #FFFFFF !important;
+            border-width: 0 2px 2px 0 !important;
+            transform: rotate(45deg) !important;
+            margin-bottom: 2px !important;
+            position: absolute !important;
         }
 
-        .checkbox-container input:checked ~ .checkbox-box::after {
-            display: block;
+        .roadmap-checkbox-container input[type="checkbox"]:checked ~ .roadmap-checkbox-box::after {
+            display: block !important;
         }
 
-        .checkbox-container:hover .checkbox-box {
-            border-color: var(--primary);
+        .roadmap-checkbox-container:hover .roadmap-checkbox-box {
+            border-color: var(--primary) !important;
         }
 
-        .checkbox-label {
-            line-height: 1.3rem;
-            font-weight: 500;
+        .roadmap-checkbox-label {
+            display: inline-block !important;
+            line-height: 1.3rem !important;
+            font-weight: 500 !important;
+            color: var(--text-primary) !important;
+            text-align: left !important;
+            white-space: normal !important;
+            pointer-events: none !important;
         }
 
         /* ==========================================================================
@@ -2183,8 +2205,8 @@
             serviceFilterBox.innerHTML = "";
             services.forEach(s => {
                 const label = document.createElement("label");
-                label.className = "checkbox-container";
-                label.innerHTML = `<input type="checkbox" name="service-filter" value="${s}"><span class="checkbox-box"></span><span class="checkbox-label">${s}</span>`;
+                label.className = "roadmap-checkbox-container";
+                label.innerHTML = `<input type="checkbox" name="service-filter" value="${s}"><span class="roadmap-checkbox-box"></span><span class="roadmap-checkbox-label">${s}</span>`;
                 label.querySelector("input").addEventListener("change", (e) => {
                     if (e.target.checked) activeFilters.service.push(s);
                     else activeFilters.service = activeFilters.service.filter(item => item !== s);
@@ -2196,8 +2218,8 @@
             initiativeFilterBox.innerHTML = "";
             initiatives.forEach(i => {
                 const label = document.createElement("label");
-                label.className = "checkbox-container";
-                label.innerHTML = `<input type="checkbox" name="initiative-filter" value="${i}"><span class="checkbox-box"></span><span class="checkbox-label">${i}</span>`;
+                label.className = "roadmap-checkbox-container";
+                label.innerHTML = `<input type="checkbox" name="initiative-filter" value="${i}"><span class="roadmap-checkbox-box"></span><span class="roadmap-checkbox-label">${i}</span>`;
                 label.querySelector("input").addEventListener("change", (e) => {
                     if (e.target.checked) activeFilters.initiative.push(i);
                     else activeFilters.initiative = activeFilters.initiative.filter(item => item !== i);
@@ -2209,8 +2231,8 @@
             statusFilterBox.innerHTML = "";
             statuses.forEach(st => {
                 const label = document.createElement("label");
-                label.className = "checkbox-container";
-                label.innerHTML = `<input type="checkbox" name="status-filter" value="${st}"><span class="checkbox-box"></span><span class="checkbox-label">${st}</span>`;
+                label.className = "roadmap-checkbox-container";
+                label.innerHTML = `<input type="checkbox" name="status-filter" value="${st}"><span class="roadmap-checkbox-box"></span><span class="roadmap-checkbox-label">${st}</span>`;
                 label.querySelector("input").addEventListener("change", (e) => {
                     if (e.target.checked) activeFilters.status.push(st);
                     else activeFilters.status = activeFilters.status.filter(item => item !== st);

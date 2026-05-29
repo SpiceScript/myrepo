@@ -763,11 +763,11 @@ function buildFilterPanels() {
     serviceFilterBox.innerHTML = "";
     services.forEach((s, idx) => {
         const label = document.createElement("label");
-        label.className = "checkbox-container";
+        label.className = "roadmap-checkbox-container";
         label.innerHTML = `
             <input type="checkbox" name="service-filter" value="${s}">
-            <span class="checkbox-box"></span>
-            <span class="checkbox-label">${s}</span>
+            <span class="roadmap-checkbox-box"></span>
+            <span class="roadmap-checkbox-label">${s}</span>
         `;
         label.querySelector("input").addEventListener("change", (e) => {
             if (e.target.checked) activeFilters.service.push(s);
@@ -781,11 +781,11 @@ function buildFilterPanels() {
     initiativeFilterBox.innerHTML = "";
     initiatives.forEach((i, idx) => {
         const label = document.createElement("label");
-        label.className = "checkbox-container";
+        label.className = "roadmap-checkbox-container";
         label.innerHTML = `
             <input type="checkbox" name="initiative-filter" value="${i}">
-            <span class="checkbox-box"></span>
-            <span class="checkbox-label">${i}</span>
+            <span class="roadmap-checkbox-box"></span>
+            <span class="roadmap-checkbox-label">${i}</span>
         `;
         label.querySelector("input").addEventListener("change", (e) => {
             if (e.target.checked) activeFilters.initiative.push(i);
@@ -799,11 +799,11 @@ function buildFilterPanels() {
     statusFilterBox.innerHTML = "";
     statuses.forEach((st, idx) => {
         const label = document.createElement("label");
-        label.className = "checkbox-container";
+        label.className = "roadmap-checkbox-container";
         label.innerHTML = `
             <input type="checkbox" name="status-filter" value="${st}">
-            <span class="checkbox-box"></span>
-            <span class="checkbox-label">${st}</span>
+            <span class="roadmap-checkbox-box"></span>
+            <span class="roadmap-checkbox-label">${st}</span>
         `;
         label.querySelector("input").addEventListener("change", (e) => {
             if (e.target.checked) activeFilters.status.push(st);
