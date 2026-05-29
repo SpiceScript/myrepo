@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Workspace Services Roadmap & Strategy Hub</title>
+    <!-- Modern Premium Typography -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- App Header -->
+    <header class="app-header">
+        <div class="header-logo-section">
+            <!-- Dynamic Logo SVG -->
+            <svg class="app-logo" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 2L2 7L12 12L22 7L12 2Z" fill="url(#logo-grad)" />
+                <path d="M2 17L12 22L22 17M2 12L12 17L22 12" stroke="url(#logo-grad)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <defs>
+                    <linearGradient id="logo-grad" x1="2" y1="2" x2="22" y2="22" gradientUnits="userSpaceOnUse">
+                        <stop stop-color="#8B5CF6" />
+                        <stop offset="1" stop-color="#3B82F6" />
+                    </linearGradient>
+                </defs>
+            </svg>
+            <div class="header-titles">
+                <h1>Workspace Services</h1>
+                <p>Roadmap & Strategy Hub</p>
+            </div>
+        </div>
+        
+        <!-- Search and Action Controls -->
+        <div class="header-actions">
+            <div class="search-container">
+                <svg class="search-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <input type="text" id="roadmap-search" placeholder="Search by Feature ID, title, or description...">
+            </div>
+            
+            <button id="add-item-btn" class="btn btn-primary">
+                <svg class="btn-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                </svg>
+                Add Item
+            </button>
+
+            <!-- Light/Dark Mode Switcher -->
+            <button id="theme-toggle" class="btn btn-icon-only" title="Toggle Theme">
+                <svg class="sun-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m12.728 0l-.707-.707M6.343 6.343l-.707-.707M12 8a4 4 0 100 8 4 4 0 000-8z" />
+                </svg>
+                <svg class="moon-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="display: none;">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                </svg>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Navigation Tabs -->
+    <nav class="app-nav">
+        <div class="nav-tabs">
+            <button class="nav-tab active" data-view="list">
+                <svg class="tab-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                </svg>
+                Items (List)
+            </button>
+            <button class="nav-tab" data-view="timeline">
+                <svg class="tab-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                Timeline View
+            </button>
+        </div>
+        <div class="nav-stats">
+            Showing <span id="visible-count">0</span> of <span id="total-count">0</span> deliverables
+        </div>
+    </nav>
+
+    <!-- Main Workspace Grid -->
+    <main class="app-main">
+        <!-- Sidebar Filters -->
+        <aside class="filter-sidebar">
+            <div class="sidebar-header">
+                <h2>Filters</h2>
+                <button id="clear-filters" class="btn btn-text">Clear All</button>
+            </div>
+            
+            <!-- Service Area Filters -->
+            <div class="filter-group">
+                <h3>Service Area</h3>
+                <div class="filter-options" id="filter-service">
+                    <!-- Service options populated dynamically -->
+                </div>
+            </div>
+
+            <!-- Initiative Filters -->
+            <div class="filter-group">
+                <h3>Enterprise/BU Initiative</h3>
+                <div class="filter-options" id="filter-initiative">
+                    <!-- Initiative options populated dynamically -->
+                </div>
+            </div>
+
+            <!-- Status Filters -->
+            <div class="filter-group">
+                <h3>Status</h3>
+                <div class="filter-options" id="filter-status">
+                    <!-- Status options populated dynamically -->
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Display Container -->
+        <section class="content-display">
+            <!-- List View (Default) -->
+            <div id="list-view-container" class="view-panel active">
+                <div class="cards-grid" id="roadmap-cards-grid">
+                    <!-- Cards populated dynamically -->
+                </div>
+            </div>
+
+            <!-- Timeline View -->
+            <div id="timeline-view-container" class="view-panel">
+                <!-- Timeline Controls -->
+                <div class="timeline-controls">
+                    <div class="timeline-grouping">
+                        <span class="control-label">Group Swimlanes By:</span>
+                        <label class="radio-btn">
+                            <input type="radio" name="timeline-group" value="service" checked>
+                            <span>Service Area</span>
+                        </label>
+                        <label class="radio-btn">
+                            <input type="radio" name="timeline-group" value="objective">
+                            <span>Strategic Objective</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Timeline Board -->
+                <div class="timeline-board-wrapper">
+                    <div class="timeline-board" id="timeline-board">
+                        <!-- Quarters Header and Swimlanes populated dynamically -->
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Details Sidebar Drawer -->
+    <div class="drawer-overlay" id="drawer-overlay"></div>
+    <div class="details-drawer" id="details-drawer">
+        <button class="close-drawer-btn" id="close-drawer">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M18 6L6 18M6 6l12 12" />
+            </svg>
+        </button>
+        
+        <div class="drawer-content" id="drawer-detail-body">
+            <!-- Detail layout populated dynamically -->
+        </div>
+    </div>
+
+    <!-- Modal Form: Add Roadmap Item (Offline Mock Demo) -->
+    <div class="modal-overlay" id="modal-overlay">
+        <div class="modal-box">
+            <div class="modal-header">
+                <h2>Add Roadmap Item</h2>
+                <button class="close-modal-btn" id="close-modal">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M18 6L6 18M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+            <form id="add-roadmap-form" class="modal-form">
+                <div class="form-group">
+                    <label for="form-title">Key Result / Deliverable Title *</label>
+                    <input type="text" id="form-title" required placeholder="e.g. Migrate legacy telephony to Teams voice">
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="form-service">Service Area *</label>
+                        <select id="form-service" required>
+                            <option value="" disabled selected>Select service line...</option>
+                            <option value="Devices and Applications">Devices and Applications</option>
+                            <option value="Communication and Collaboration">Communication and Collaboration</option>
+                            <option value="Colleague Services">Colleague Services</option>
+                            <option value="AI Enablement">AI Enablement</option>
+                            <option value="EST">EST</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="form-status">Status *</label>
+                        <select id="form-status" required>
+                            <option value="In Development">In Development</option>
+                            <option value="Rolling Out">Rolling Out</option>
+                            <option value="Launched">Launched</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="form-objective">Strategic Objective *</label>
+                    <input type="text" id="form-objective" required placeholder="e.g. Modernize digital workplace tools and services">
+                </div>
+
+                <div class="form-group">
+                    <label for="form-initiative">Enterprise / BU Initiative *</label>
+                    <input type="text" id="form-initiative" required placeholder="e.g. Digital Employee Experience (DEX) Transformation">
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="form-start">Start Date *</label>
+                        <input type="date" id="form-start" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="form-end">End Date *</label>
+                        <input type="date" id="form-end" required>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="form-progress">Progress Scale (0.0 to 1.0) *</label>
+                        <input type="number" id="form-progress" min="0.0" max="1.0" step="0.05" value="0.0" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="form-jira">Jira Ticket Link (URL)</label>
+                        <input type="url" id="form-jira" placeholder="e.g. https://yourcompany.atlassian.net/browse/WSS-101">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="form-desc">Description</label>
+                    <textarea id="form-desc" rows="3" placeholder="Provide description details for this deliverable..."></textarea>
+                </div>
+                
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" id="cancel-form-btn">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Deliverable</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Main Logic Script -->
+    <script src="app.js"></script>
+</body>
+</html>
