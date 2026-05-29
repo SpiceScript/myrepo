@@ -1,3 +1,46 @@
+{% fetchxml roadmapQuery %}
+<fetch>
+  <entity name="workspaceservicesroadmap">
+    <attribute name="title" />
+    <attribute name="description" />
+    <attribute name="servicearea" />
+    <attribute name="objective" />
+    <attribute name="buinitiative" />
+    <attribute name="progress" />
+    <attribute name="status" />
+    <attribute name="startdate" />
+    <attribute name="enddate" />
+    <attribute name="subcategory" />
+    <attribute name="roadmapid" />
+    <attribute name="jiralink" />
+  </entity>
+</fetch>
+{% endfetchxml %}
+
+<script>
+  // This server-side bridge feeds your live SharePoint virtual table directly into our UI
+  window.POWER_PAGES_LIVE_DATA = [
+    {% for item in roadmapQuery.results.entities %}
+    {
+      Id: {{ forloop.index }},
+      RoadmapID: "{{ item.roadmapid }}",
+      Title: "{{ item.title }}",
+      Description: "{{ item.description }}",
+      ServiceArea: "{{ item.servicearea }}",
+      Objective: "{{ item.objective }}",
+      BUInitiative: "{{ item.buinitiative }}",
+      Progress: {{ item.progress | default: 0.0 }},
+      Status: "{{ item.status }}",
+      StartDate: "{{ item.startdate | date: 'yyyy-MM-dd' }}",
+      EndDate: "{{ item.enddate | date: 'yyyy-MM-dd' }}",
+      SubCategory: "{{ item.subcategory }}",
+      IsMilestone: false,
+      JiraLink: "{{ item.jiralink }}",
+      VersionHistory: []
+    }{% unless forloop.last %},{% endunless %}
+    {% endfor %}
+  ];
+</script>
 <!DOCTYPE html>
 <html lang="en">
 <head>
