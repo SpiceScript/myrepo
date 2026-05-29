@@ -1,4 +1,3 @@
-<%@ Page Language="C#" %>
 <!DOCTYPE html>
 <html lang="en">
 <head>
