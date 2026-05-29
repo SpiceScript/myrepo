@@ -1747,6 +1747,14 @@
 
         function fetchRoadmapData() {
             return new Promise((resolve) => {
+                // A. Check if running inside Microsoft Power Pages with Liquid data bridge active
+                if (window.POWER_PAGES_LIVE_DATA && window.POWER_PAGES_LIVE_DATA.length > 0) {
+                    console.log("Running in POWER PAGES MODE. Live SharePoint data loaded successfully via Liquid bridge.");
+                    resolve(window.POWER_PAGES_LIVE_DATA);
+                    return;
+                }
+
+                // B. Check if running inside SharePoint Online
                 if (!isSharePoint) {
                     resolve(ROADMAP_ITEMS);
                     return;
@@ -1839,12 +1847,21 @@
 
         function saveRoadmapItem(newItem) {
             return new Promise((resolve) => {
-                const categoryItems = ROADMAP_ITEMS.filter(item => item.ServiceArea === newItem.ServiceArea);
+                // Dynamic ID generator inside Local / Power Pages Mode
+                const dbSource = (window.POWER_PAGES_LIVE_DATA && window.POWER_PAGES_LIVE_DATA.length > 0) ? window.POWER_PAGES_LIVE_DATA : ROADMAP_ITEMS;
+                const categoryItems = dbSource.filter(item => item.ServiceArea === newItem.ServiceArea);
                 const count = categoryItems.length + 1;
                 const abbrev = SERVICE_ABBREVIATIONS[newItem.ServiceArea] || "WSS";
                 newItem.RoadmapID = `IS-WSS-${abbrev}-${count}`;
-                newItem.Id = ROADMAP_ITEMS.length + 1;
-                newItem.VersionHistory = [{ version: 1, date: new Date().toISOString().split('T')[0], author: "Local User", change: "Initial deliverable added to local roadmap." }];
+                newItem.Id = dbSource.length + 1;
+                newItem.VersionHistory = [{ version: 1, date: new Date().toISOString().split('T')[0], author: "Local User", change: "Initial deliverable added to roadmap." }];
+
+                if (window.POWER_PAGES_LIVE_DATA && window.POWER_PAGES_LIVE_DATA.length > 0) {
+                    window.POWER_PAGES_LIVE_DATA.push(newItem);
+                    console.log("Saved in Power Pages (Local Memory):", newItem);
+                    resolve(newItem);
+                    return;
+                }
 
                 if (!isSharePoint) {
                     ROADMAP_ITEMS.push(newItem);

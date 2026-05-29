@@ -1,3 +1,11 @@
+<!-- 
+  ==========================================================================
+  MICROSOFT POWER PAGES LIVE DATA BRIDGE (LIQUID TEMPLATE QUERY)
+  If hosting directly on MS Power Pages, uncomment the block below and paste it
+  at the very top of your Power Pages HTML tab in VS Code.
+  ==========================================================================
+-->
+<!-- 
 {% fetchxml roadmapQuery %}
 <fetch>
   <entity name="workspaceservicesroadmap">
@@ -18,7 +26,6 @@
 {% endfetchxml %}
 
 <script>
-  // This server-side bridge feeds your live SharePoint virtual table directly into our UI
   window.POWER_PAGES_LIVE_DATA = [
     {% for item in roadmapQuery.results.entities %}
     {
@@ -41,6 +48,7 @@
     {% endfor %}
   ];
 </script>
+-->
 <!DOCTYPE html>
 <html lang="en">
 <head>
